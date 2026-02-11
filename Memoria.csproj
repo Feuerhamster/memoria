@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+        <UserSecretsId>2592153e-0aa4-4bb2-9942-95e642275df0</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="MessagePack" Version="3.1.4" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.3" />
+        <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.3" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
+        <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.15.0" />
+        <PackageReference Include="MyCSharp.HttpUserAgentParser" Version="3.0.28" />
+    </ItemGroup>
+
+</Project>
