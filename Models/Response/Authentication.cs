@@ -25,3 +25,9 @@ public class AuthCreationInfo(ClaimsIdentity identity, AuthenticationProperties 
 	public ClaimsIdentity Identity { get; set; } = identity;
 	public AuthenticationProperties AuthProps { get; set; } = authProps;
 }
+
+public class AddAppAccessTokenResponse
+{
+	public UserAppAccessToken AppAccessToken { get; set; }
+	public string Secret { get; set; }
+}

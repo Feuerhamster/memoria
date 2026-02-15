@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Memoria.Models.Database;
 
 public class User {
@@ -51,4 +53,26 @@ public class UserRefreshSession {
 	public DateTime CreatedTime { get; set; } = DateTime.Now;
 	
 	public DateTime UpdatedTime { get; set; } = DateTime.Now;
+}
+
+[Flags]
+public enum EUserAppAccessTokenPermissions
+{
+	Files,
+	Calendar,
+	Contacts
+}
+
+public class UserAppAccessToken
+{
+	public Guid UserId { get; set; }
+	
+	public Guid Id { get; set; }
+	
+	public string Name { get; set; }
+	
+	[JsonIgnore]
+	public string AccessToken { get; set; }
+	
+	public EUserAppAccessTokenPermissions Permissions { get; set; }
 }

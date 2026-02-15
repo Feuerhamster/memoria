@@ -3,6 +3,7 @@ using System;
 using Memoria;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Memoria.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260215203540_PostAndTextContent")]
+    partial class PostAndTextContent
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
@@ -112,7 +115,7 @@ namespace Memoria.Migrations
 
                     b.HasIndex("RootParentId");
 
-                    b.ToTable("Posts");
+                    b.ToTable("Post");
                 });
 
             modelBuilder.Entity("Memoria.Models.Database.Space", b =>
@@ -172,7 +175,7 @@ namespace Memoria.Migrations
                     b.HasIndex("PostId")
                         .IsUnique();
 
-                    b.ToTable("TextNotes");
+                    b.ToTable("TextNote");
                 });
 
             modelBuilder.Entity("Memoria.Models.Database.User", b =>
@@ -217,17 +220,13 @@ namespace Memoria.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("Memoria.Models.Database.UserAppAccessToken", b =>
+            modelBuilder.Entity("Memoria.Models.Database.UserAppAccessTokens", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("AccessToken")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
@@ -368,7 +367,7 @@ namespace Memoria.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Memoria.Models.Database.UserAppAccessToken", b =>
+            modelBuilder.Entity("Memoria.Models.Database.UserAppAccessTokens", b =>
                 {
                     b.HasOne("Memoria.Models.Database.User", null)
                         .WithMany()

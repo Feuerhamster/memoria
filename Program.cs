@@ -38,6 +38,8 @@ builder.Services.AddScoped<SessionValidationMiddleware>();
 
 builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+builder.Services.AddScoped<IFileStorageService, FileStorageService>();
+builder.Services.AddScoped<IAccessPolicyHelperService, AccessPolicyHelperService>();
 builder.Services.AddSingleton<IKeyService, KeyService>();
 
 builder.Services.AddSingleton<IConfigureOptions<CookieAuthenticationOptions>, ConfigureCookieOptions>();

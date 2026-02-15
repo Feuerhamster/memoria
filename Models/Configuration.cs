@@ -35,3 +35,10 @@ public class SessionConfig {
 	public TimeSpan Expiry { get; set; }
 	public int TokenLength { get; set; }
 }
+
+public class FileConfig
+{
+	public const string ConfigKey = "Files";
+	public string StoragePath { get; set; } = "files";
+	public long UploadLimitMb { get; set; } = 12000;
+}

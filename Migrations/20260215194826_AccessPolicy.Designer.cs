@@ -3,6 +3,7 @@ using System;
 using Memoria;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,27 +11,14 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Memoria.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260215194826_AccessPolicy")]
+    partial class AccessPolicy
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
-
-            modelBuilder.Entity("FileMetadataPost", b =>
-                {
-                    b.Property<Guid>("FilesId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("PostId")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("FilesId", "PostId");
-
-                    b.HasIndex("PostId");
-
-                    b.ToTable("FileMetadataPost");
-                });
 
             modelBuilder.Entity("Memoria.Models.Database.FileMetadata", b =>
                 {
@@ -69,50 +57,7 @@ namespace Memoria.Migrations
 
                     b.HasIndex("OwnerUserId");
 
-                    b.HasIndex("SpaceId");
-
                     b.ToTable("Files");
-                });
-
-            modelBuilder.Entity("Memoria.Models.Database.Post", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("CreatorUserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsArchived")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("ModifiedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("ParentId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("RootParentId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("SpaceId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Visibility")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatorUserId");
-
-                    b.HasIndex("ParentId");
-
-                    b.HasIndex("RootParentId");
-
-                    b.ToTable("Posts");
                 });
 
             modelBuilder.Entity("Memoria.Models.Database.Space", b =>
@@ -143,36 +88,7 @@ namespace Memoria.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ImageId");
-
                     b.ToTable("Spaces");
-                });
-
-            modelBuilder.Entity("Memoria.Models.Database.TextNote", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsInSpaceDocs")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("PostId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Text")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Title")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PostId")
-                        .IsUnique();
-
-                    b.ToTable("TextNotes");
                 });
 
             modelBuilder.Entity("Memoria.Models.Database.User", b =>
@@ -217,17 +133,13 @@ namespace Memoria.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("Memoria.Models.Database.UserAppAccessToken", b =>
+            modelBuilder.Entity("Memoria.Models.Database.UserAppAccessTokens", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("AccessToken")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
@@ -303,21 +215,6 @@ namespace Memoria.Migrations
                     b.ToTable("SpaceUser");
                 });
 
-            modelBuilder.Entity("FileMetadataPost", b =>
-                {
-                    b.HasOne("Memoria.Models.Database.FileMetadata", null)
-                        .WithMany()
-                        .HasForeignKey("FilesId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Memoria.Models.Database.Post", null)
-                        .WithMany()
-                        .HasForeignKey("PostId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Memoria.Models.Database.FileMetadata", b =>
                 {
                     b.HasOne("Memoria.Models.Database.User", null)
@@ -325,50 +222,9 @@ namespace Memoria.Migrations
                         .HasForeignKey("OwnerUserId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .IsRequired();
-
-                    b.HasOne("Memoria.Models.Database.Space", null)
-                        .WithMany()
-                        .HasForeignKey("SpaceId")
-                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
-            modelBuilder.Entity("Memoria.Models.Database.Post", b =>
-                {
-                    b.HasOne("Memoria.Models.Database.User", null)
-                        .WithMany()
-                        .HasForeignKey("CreatorUserId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .IsRequired();
-
-                    b.HasOne("Memoria.Models.Database.Post", null)
-                        .WithMany()
-                        .HasForeignKey("ParentId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Memoria.Models.Database.Post", null)
-                        .WithMany()
-                        .HasForeignKey("RootParentId")
-                        .OnDelete(DeleteBehavior.SetNull);
-                });
-
-            modelBuilder.Entity("Memoria.Models.Database.Space", b =>
-                {
-                    b.HasOne("Memoria.Models.Database.FileMetadata", null)
-                        .WithMany()
-                        .HasForeignKey("ImageId")
-                        .OnDelete(DeleteBehavior.Cascade);
-                });
-
-            modelBuilder.Entity("Memoria.Models.Database.TextNote", b =>
-                {
-                    b.HasOne("Memoria.Models.Database.Post", null)
-                        .WithOne("TextNote")
-                        .HasForeignKey("Memoria.Models.Database.TextNote", "PostId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Memoria.Models.Database.UserAppAccessToken", b =>
+            modelBuilder.Entity("Memoria.Models.Database.UserAppAccessTokens", b =>
                 {
                     b.HasOne("Memoria.Models.Database.User", null)
                         .WithMany()
@@ -399,11 +255,6 @@ namespace Memoria.Migrations
                         .HasForeignKey("SpaceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Memoria.Models.Database.Post", b =>
-                {
-                    b.Navigation("TextNote");
                 });
 #pragma warning restore 612, 618
         }
