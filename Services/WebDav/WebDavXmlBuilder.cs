@@ -10,12 +10,23 @@ public static class WebDavXmlBuilder
 {
 	private static readonly XNamespace Dav = "DAV:";
 
-	public static string BuildHref(params string[] segments)
+	/// <summary>
+	/// Builds a WebDAV href path from segments.
+	/// Collections end with a trailing slash, files do not (RFC 4918 Section 8.3).
+	/// </summary>
+	/// <param name="isCollection">True for collections (adds trailing /), false for files</param>
+	/// <param name="segments">Path segments to join</param>
+	public static string BuildHref(bool isCollection, params string[] segments)
 	{
 		if (segments.Length == 0) return "/webdav/";
 		var joined = string.Join("/", segments.Select(Uri.EscapeDataString));
-		return $"/webdav/{joined}/";
+		return isCollection ? $"/webdav/{joined}/" : $"/webdav/{joined}";
 	}
+
+	/// <summary>
+	/// Builds a collection href (with trailing slash). Convenience overload.
+	/// </summary>
+	public static string BuildHref(params string[] segments) => BuildHref(true, segments);
 
 	public static XElement CreateCollection(string href, string name, DateTime? created = null)
 	{

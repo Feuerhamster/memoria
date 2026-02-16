@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using EFCoreSecondLevelCacheInterceptor;
+using Memoria.Attributes;
 using Memoria.Authentication;
 using Memoria.Extensions;
 using Memoria.Models;
@@ -21,6 +22,7 @@ public enum EEntityPolicy { Public, Shared, Private }
 
 [Route("webdav")]
 [Authorize(AuthenticationSchemes = BasicAuthHandler.SchemeName, Policy = "WebDavFiles")]
+[EnsureWwwAuthenticate]
 public class WebDavController(
 	AppDbContext db,
 	IFileStorageService fileService,
@@ -40,6 +42,7 @@ public class WebDavController(
 	}
 
 	[AcceptVerbs("PROPFIND")]
+	[ValidateWebDavDepth]
 	[Route("")]
 	public async Task<IActionResult> RootDirectory()
 	{
@@ -49,10 +52,12 @@ public class WebDavController(
 		if (depth < 1) return MultiStatus(responses);
 		responses.Add(WebDavXmlBuilder.CreateCollection("/webdav/users/", localizer["Users"]));
 		responses.Add(WebDavXmlBuilder.CreateCollection("/webdav/spaces/", localizer["Spaces"]));
+		
 		return MultiStatus(responses);
 	}
 
 	[AcceptVerbs("PROPFIND")]
+	[ValidateWebDavDepth]
 	[Route("users")]
 	public async Task<IActionResult> ListUsers(CancellationToken ct)
 	{
@@ -61,6 +66,7 @@ public class WebDavController(
 	}
 	
 	[AcceptVerbs("PROPFIND")]
+	[ValidateWebDavDepth]
 	[Route("spaces")]
 	public async Task<IActionResult> ListSpaces(CancellationToken ct)
 	{
@@ -69,6 +75,7 @@ public class WebDavController(
 	}
 	
 	[AcceptVerbs("PROPFIND")]
+	[ValidateWebDavDepth]
 	[Route("{entityType}/{entityName}")]
 	public async Task<IActionResult> PolicyDirectory(EEntityTypes entityType, string entityName, CancellationToken ct)
 	{
@@ -78,6 +85,7 @@ public class WebDavController(
 	}
 	
 	[AcceptVerbs("PROPFIND")]
+	[ValidateWebDavDepth]
 	[Route("{entityType}/{entityName}/{policy}")]
 	public async Task<IActionResult> GetEntityFileListByPolicy(EEntityTypes entityType, string entityName, EEntityPolicy policy, CancellationToken ct)
 	{
@@ -89,22 +97,36 @@ public class WebDavController(
 	[HttpGet("{entityType}/{entityName}/{policy}/{fileName}")]
 	public async Task<IActionResult> Get(EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName, CancellationToken ct)
 	{
-		var result = await GetFile(entityType, entityName, policy, fileName, ct);
-		
-		if (result == null) return NotFound();
+		var resolved = await this.ResolveFile(entityType, entityName, policy, fileName, ct);
+		if (resolved?.File == null) return NotFound();
 
-		return File(result.Value.stream, result.Value.contentType, enableRangeProcessing: true);
+		// Validate ETag preconditions
+		var etagError = ValidateETag(resolved.File.FileHash, isModificationRequest: false);
+		if (etagError != null) return etagError;
+
+		// Check read access
+		if (!await accessControl.CheckAccessPolicy(resolved.File.AccessPolicy, AccessIntent.Read, resolved.File.OwnerUserId, User, resolved.File.SpaceId))
+			return Forbid();
+
+		var result = await fileService.GetFile(resolved.File.Id, ct);
+		if (result.IsFailed) return NotFound();
+
+		// Set ETag header in response
+		Response.Headers.ETag = $"\"{resolved.File.FileHash}\"";
+
+		return File(result.Value.FileStream, resolved.File.ContentType, enableRangeProcessing: true);
 	}
 	
 	[AcceptVerbs("PROPFIND")]
+	[ValidateWebDavDepth]
 	[Route("{entityType}/{entityName}/{policy}/{fileName}")]
 	public async Task<IActionResult> GetFileMetadata(EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName, CancellationToken ct)
 	{
 		var resolved = await this.ResolveFile(entityType, entityName, policy, fileName, ct);
-		
+
 		if (resolved?.File == null) return NotFound();
 
-		var href = WebDavXmlBuilder.BuildHref(entityType.ToString().ToLower(), entityName, policy.ToString().ToLower(), fileName);
+		var href = WebDavXmlBuilder.BuildHref(false, entityType.ToString().ToLower(), entityName, policy.ToString().ToLower(), fileName);
 		return MultiStatus(new List<XElement>([WebDavXmlBuilder.CreateFile(href, resolved.File)]));
 	}
 	
@@ -121,12 +143,17 @@ public class WebDavController(
 		
 		if (existingFile != null)
 		{
+			// Check write access
 			if (!await accessControl.CheckAccessPolicy(existingFile.AccessPolicy, AccessIntent.Write, existingFile.OwnerUserId, User,
 				    existingFile.SpaceId))
 			{
 				return Forbid();
 			}
-			
+
+			// Validate ETag preconditions (If-Match)
+			var etagError = ValidateETag(existingFile.FileHash, isModificationRequest: true);
+			if (etagError != null) return etagError;
+
 			await fileService.DeleteFile(existingFile, ct);
 		}
 		
@@ -144,14 +171,36 @@ public class WebDavController(
 	[Route("{entityType}/{entityName}/{policy}/{fileName}")]
 	public async Task<IActionResult> Delete(EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName, CancellationToken ct)
 	{
-		var success = await DeleteFile(entityType, entityName, policy, fileName, ct);
-		return success ? NoContent() : NotFound();
+		var resolved = await ResolveFile(entityType, entityName, policy, fileName, ct);
+		if (resolved?.File == null) return NotFound();
+
+		// Check write access
+		if (!await accessControl.CheckAccessPolicy(resolved.File.AccessPolicy, AccessIntent.Write, resolved.File.OwnerUserId, User, resolved.File.SpaceId))
+			return Forbid();
+
+		// Validate ETag preconditions (If-Match)
+		var etagError = ValidateETag(resolved.File.FileHash, isModificationRequest: true);
+		if (etagError != null) return etagError;
+
+		await fileService.DeleteFile(resolved.File, ct);
+		return NoContent();
 	}
 
+	/// <summary>
+	/// MKCOL is not supported because this WebDAV server uses a fixed virtual folder structure.
+	/// All collections (users, spaces, policy folders) are pre-defined and managed by the application.
+	/// </summary>
 	[AcceptVerbs("MKCOL")]
-	public IActionResult MkCol()
+	[Route("{**path}")]
+	public IActionResult MkCol(string? path = null)
 	{
-		return StatusCode(405);
+		// RFC 4918 Section 9.3: MKCOL creates a collection
+		// Since we have a fixed virtual structure, creating arbitrary collections is not allowed
+		return StatusCode(405, new
+		{
+			Error = "Method Not Allowed",
+			Detail = "This WebDAV server uses a fixed folder structure. Collections cannot be created by clients."
+		});
 	}
 
 	[AcceptVerbs("MOVE")]
@@ -200,9 +249,9 @@ public class WebDavController(
 		}
 
 		// Update file metadata
+		// Note: OwnerUserId is preserved during MOVE - only location (SpaceId) and policy change
 		sourceFile.FileName = destParams.Value.fileName;
 		sourceFile.SpaceId = destCtx.SpaceId;
-		sourceFile.OwnerUserId = destCtx.OwnerId;
 		sourceFile.AccessPolicy = destPolicy.Value;
 		await db.SaveChangesAsync(ct);
 
@@ -249,7 +298,7 @@ public class WebDavController(
 			await fileService.DeleteFile(destFile, ct);
 		}
 
-		// Copy file
+		// Copy file (streams directly from source to destination without loading into memory)
 		await using (sourceResult.Value.stream)
 		{
 			var owner = new RessourceOwnerHelper { UserId = destCtx.OwnerId, SpaceId = destCtx.SpaceId };
@@ -268,7 +317,7 @@ public class WebDavController(
 		if (depth < 1) return responses;
 
 		var userId = this.User.GetUserId();
-		
+
 		var users = await db.Users.Cacheable().AsNoTracking().ToListAsync(ct);
 
 		responses.AddRange(users.Select(user => WebDavXmlBuilder.CreateCollection(
@@ -294,8 +343,11 @@ public class WebDavController(
 			.Select(g => g.First())
 			.ToList();
 
-		responses.AddRange(spaces.Select(space => WebDavXmlBuilder.CreateCollection(WebDavXmlBuilder.BuildHref("spaces", space.Name), space.Name, space.CreatedAt)));
-		
+		responses.AddRange(spaces.Select(space => WebDavXmlBuilder.CreateCollection(
+			WebDavXmlBuilder.BuildHref("spaces", space.Name),
+			space.Name,
+			space.CreatedAt)));
+
 		return responses;
 	}
 
@@ -341,8 +393,22 @@ public class WebDavController(
 
 		if (depth < 1) return responses;
 
-		var files = await WebDavHelpers.ListFilesInPolicyFolder(db, ctx.SpaceId, ctx.SpaceId.HasValue ? null : ctx.OwnerId, policy.Value, entityType.ToString().ToLower(), name, policyFolder, ct);
-		responses.AddRange(files);
+		// Get all files in the policy folder
+		var allFiles = await WebDavHelpers.ListFilesInPolicyFolder(db, ctx.SpaceId, ctx.SpaceId.HasValue ? null : ctx.OwnerId, policy.Value, ct);
+
+		// Filter by read access permissions
+		var accessibleFiles = new List<FileMetadata>();
+		foreach (var file in allFiles)
+		{
+			if (await accessControl.CheckAccessPolicy(file.AccessPolicy, AccessIntent.Read, file.OwnerUserId, User, file.SpaceId))
+			{
+				accessibleFiles.Add(file);
+			}
+		}
+
+		// Create XML responses for accessible files
+		var fileResponses = WebDavHelpers.CreateFileResponses(accessibleFiles, entityType.ToString().ToLower(), name, policyFolder);
+		responses.AddRange(fileResponses);
 
 		return responses;
 	}
@@ -377,24 +443,6 @@ public class WebDavController(
 		return new ResolvedFile((EntityContext)ctx, (RessourceAccessPolicy)policy, file);
 	}
 
-	private async Task<bool> DeleteFile(EEntityTypes entityType, string name, EEntityPolicy policyFolder, string fileName, CancellationToken ct)
-	{
-		var ctx = await ResolveEntity(entityType, name, ct);
-		if (ctx == null) return false;
-
-		var policy = WebDavHelpers.MapPolicyFolder(policyFolder, ctx.IsSpaceContext);
-		if (policy == null) return false;
-
-		var file = await WebDavHelpers.FindFile(db, ctx.SpaceId, ctx.OwnerId, policy.Value, fileName, ct);
-		if (file == null) return false;
-
-		if (!await accessControl.CheckAccessPolicy(file.AccessPolicy, AccessIntent.Write, ctx.OwnerId, User, ctx.SpaceId))
-			return false;
-
-		await fileService.DeleteFile(file, ct);
-		return true;
-	}
-
 	// --- Entity Resolution ---
 
 	private async Task<EntityContext?> ResolveEntity(EEntityTypes entityType, string name, CancellationToken ct)
@@ -421,14 +469,53 @@ public class WebDavController(
 
 	// --- Helper Methods ---
 
+	/// <summary>
+	/// Validates ETag preconditions (If-Match, If-None-Match) for a file.
+	/// Returns an error result if validation fails, otherwise null.
+	/// </summary>
+	/// <param name="fileETag">The file's current ETag (typically the file hash)</param>
+	/// <param name="isModificationRequest">True for PUT/DELETE (uses If-Match), false for GET (uses If-None-Match)</param>
+	private IActionResult? ValidateETag(string fileETag, bool isModificationRequest)
+	{
+		var ifMatch = Request.Headers["If-Match"].FirstOrDefault();
+		var ifNoneMatch = Request.Headers["If-None-Match"].FirstOrDefault();
+
+		// Normalize ETag format (with or without quotes)
+		var normalizedFileETag = fileETag.StartsWith('"') ? fileETag : $"\"{fileETag}\"";
+
+		if (isModificationRequest && !string.IsNullOrEmpty(ifMatch))
+		{
+			// PUT/DELETE with If-Match: only proceed if ETag matches
+			if (ifMatch != "*" && ifMatch != normalizedFileETag)
+			{
+				return StatusCode(412, new { Error = "Precondition Failed", Detail = "ETag mismatch" });
+			}
+		}
+
+		if (!isModificationRequest && !string.IsNullOrEmpty(ifNoneMatch))
+		{
+			// GET with If-None-Match: return 304 if ETag matches (client has current version)
+			if (ifNoneMatch == "*" || ifNoneMatch == normalizedFileETag)
+			{
+				return StatusCode(304); // Not Modified
+			}
+		}
+
+		return null; // Validation passed
+	}
+
 	private static string[] ParsePath(string? path) =>
 		string.IsNullOrWhiteSpace(path) ? [] : path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
+	/// <summary>
+	/// Parses the Depth header. Defaults to 1 if not specified.
+	/// Note: "infinity" is rejected by ValidateWebDavDepthAttribute before reaching this method.
+	/// </summary>
 	private int GetDepth() => Request.Headers["Depth"].FirstOrDefault() switch
 	{
 		"0" => 0,
 		"1" => 1,
-		_ => 1
+		_ => 1  // Default to 1 if header is missing
 	};
 
 	private string[]? ParseDestinationHeader()
@@ -454,14 +541,26 @@ public class WebDavController(
 		if (!Enum.TryParse<EEntityTypes>(segments[0], true, out var entityType)) return null;
 		if (!Enum.TryParse<EEntityPolicy>(segments[2], true, out var policy)) return null;
 
-		return (entityType, segments[1], policy, segments[3]);
+		// Decode URL-encoded segments (handles spaces and special characters)
+		var entityName = Uri.UnescapeDataString(segments[1]);
+		var fileName = Uri.UnescapeDataString(segments[3]);
+
+		return (entityType, entityName, policy, fileName);
 	}
 
+	/// <summary>
+	/// Determines the content type for a file being uploaded via WebDAV PUT.
+	/// In WebDAV, the Content-Type header of the PUT request represents the content type
+	/// of the file being uploaded, not the request body format.
+	/// Falls back to file extension detection if not provided or generic.
+	/// </summary>
 	private string DetermineContentType(string fileName)
 	{
+		// In WebDAV PUT, Request.ContentType is the actual file's content type
 		var contentType = Request.ContentType;
 		if (string.IsNullOrEmpty(contentType) || contentType == "application/octet-stream")
 		{
+			// Fallback: Try to determine from file extension
 			if (!ContentTypeProvider.TryGetContentType(fileName, out contentType))
 				contentType = "application/octet-stream";
 		}

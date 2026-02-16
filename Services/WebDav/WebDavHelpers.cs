@@ -45,16 +45,14 @@ public static class WebDavHelpers
 	}
 
 	/// <summary>
-	/// Lists files in a policy folder and creates XML responses
+	/// Lists files in a policy folder.
+	/// Note: Does not perform access control checks - caller must filter results.
 	/// </summary>
-	public static async Task<List<XElement>> ListFilesInPolicyFolder(
+	public static async Task<List<FileMetadata>> ListFilesInPolicyFolder(
 		AppDbContext db,
 		Guid? spaceId,
 		Guid? ownerId,
 		RessourceAccessPolicy policy,
-		string basePath,
-		string entityName,
-		EEntityPolicy policyFolder,
 		CancellationToken ct)
 	{
 		var filesQuery = db.Files.Cacheable().AsNoTracking().Where(f => f.AccessPolicy == policy);
@@ -68,9 +66,21 @@ public static class WebDavHelpers
 			filesQuery = filesQuery.Where(f => f.OwnerUserId == ownerId && f.SpaceId == null);
 		}
 
-		var files = await filesQuery.ToListAsync(ct);
+		return await filesQuery.ToListAsync(ct);
+	}
 
-		return (from file in files let href = WebDavXmlBuilder.BuildHref(basePath, entityName, policyFolder.ToString().ToLower(), file.FileName).TrimEnd('/') select WebDavXmlBuilder.CreateFile(href, file)).ToList();
+	/// <summary>
+	/// Creates WebDAV XML responses for a list of files.
+	/// </summary>
+	public static List<XElement> CreateFileResponses(
+		IEnumerable<FileMetadata> files,
+		string basePath,
+		string entityName,
+		EEntityPolicy policyFolder)
+	{
+		return (from file in files
+			let href = WebDavXmlBuilder.BuildHref(false, basePath, entityName, policyFolder.ToString().ToLower(), file.FileName)
+			select WebDavXmlBuilder.CreateFile(href, file)).ToList();
 	}
 	
 	public static async Task<FileMetadata?> FindFile(

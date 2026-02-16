@@ -26,10 +26,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Authentication\" />
-    </ItemGroup>
-
-    <ItemGroup>
       <EmbeddedResource Update="Ressources\Controllers\WebDavController.de.resx">
         <Generator>ResXFileCodeGenerator</Generator>
       </EmbeddedResource>
