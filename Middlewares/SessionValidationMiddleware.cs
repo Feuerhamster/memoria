@@ -12,7 +12,7 @@ public class SessionValidationMiddleware(ISessionService sessionService, IOption
 {
 	public async Task InvokeAsync(HttpContext context, RequestDelegate next)
 	{
-		if (context.User.Identity?.IsAuthenticated != true)
+		if (context.User.Identity?.IsAuthenticated != true || context.User.Identity.AuthenticationType != CookieAuthenticationDefaults.AuthenticationScheme)
 		{
 			await next(context);
 			return;

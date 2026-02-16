@@ -33,7 +33,7 @@ public class FileController(AppDbContext db, IFileStorageService fileService, IA
             return new NotFoundApiException(new FileNotFoundException());
         }
 
-        var hasAccess = await accessHelper.CheckAccessPolicy(file.AccessPolicy, RessourceAccessIntention.Write, file.OwnerUserId, this.User,
+        var hasAccess = await accessHelper.CheckAccessPolicy(file.AccessPolicy, AccessIntent.Write, file.OwnerUserId, this.User,
             file.SpaceId);
 
         if (!hasAccess)
@@ -84,7 +84,7 @@ public class FileController(AppDbContext db, IFileStorageService fileService, IA
             accessPolicy = (RessourceAccessPolicy)upload.AccessPolicy;
         } else if (upload.SpaceId != null)
         {
-            accessPolicy = RessourceAccessPolicy.SpaceMembers;
+            accessPolicy = RessourceAccessPolicy.Members;
         }
         
         await using var stream = upload.File.OpenReadStream();
@@ -116,7 +116,7 @@ public class FileController(AppDbContext db, IFileStorageService fileService, IA
             return new NotFoundApiException(new FileNotFoundException());
         }
 
-        var hasAccess = await accessHelper.CheckAccessPolicy(file.AccessPolicy, RessourceAccessIntention.Write, file.OwnerUserId, this.User,
+        var hasAccess = await accessHelper.CheckAccessPolicy(file.AccessPolicy, AccessIntent.Write, file.OwnerUserId, this.User,
             file.SpaceId);
 
         if (!hasAccess)
@@ -124,7 +124,7 @@ public class FileController(AppDbContext db, IFileStorageService fileService, IA
             return new AccessDeniedApiException();
         }
         
-        var deleted = await fileService.DeleteFile(file.Id, cancellationToken);
+        var deleted = await fileService.DeleteFile(file, cancellationToken);
 
         if (deleted)
         {

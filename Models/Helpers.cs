@@ -8,13 +8,13 @@ public class RessourceOwnerHelper
 
 public enum RessourceAccessPolicy
 {
+    Public,
+    Shared,
+    Members,
     Private,
-    SpaceMembers,
-    GeneralMembers,
-    Public
 }
 
-public enum RessourceAccessIntention
+public enum AccessIntent
 {
     Read,
     Write

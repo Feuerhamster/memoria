@@ -1,3 +1,4 @@
+using EFCoreSecondLevelCacheInterceptor;
 using Memoria.Models.Config;
 using Memoria.Models.Database;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -21,9 +22,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
     public DbSet<TextNote> TextNotes { get; set; }
     
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
-    
+
     protected override void OnConfiguring(DbContextOptionsBuilder options)
-        => options.UseSqlite($"Data Source={config.Value.ConnectionString}");
+    {
+        options.UseSqlite($"Data Source={config.Value.ConnectionString}");
+    }
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

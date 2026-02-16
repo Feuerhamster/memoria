@@ -1,13 +1,22 @@
+using EFCoreSecondLevelCacheInterceptor;
 using Memoria;
+using Memoria.Authentication;
+using Memoria.Extensions;
 using Memoria.Middlewares;
 using Memoria.Models.Config;
+using Memoria.Models.Database;
 using Memoria.Services;
 using Memoria.Setup;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
+using AppDbContext = Memoria.AppDbContext;
+using AuthenticationService = Memoria.Services.AuthenticationService;
+using IAuthenticationService = Memoria.Services.IAuthenticationService;
 
 const string DATA_PROTECTION_KEYS_COLLECTION_NAME = "aspnet-data-protection-keys";
 const string DATA_PROTECTION_APPLICATION_NAME = "memoria";
@@ -32,7 +41,7 @@ builder.Services.Configure<DatabaseConfig>(builder.Configuration.GetSection(Data
 builder.Services.Configure<OAuthConfig>(builder.Configuration.GetSection(OAuthConfig.ConfigKey));
 builder.Services.Configure<SessionConfig>(builder.Configuration.GetSection(SessionConfig.ConfigKey));
 
-builder.Services.AddDbContext<AppDbContext>();
+builder.Services.AddConfiguredDbContext();
 
 builder.Services.AddScoped<SessionValidationMiddleware>();
 
@@ -40,13 +49,17 @@ builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IAccessPolicyHelperService, AccessPolicyHelperService>();
+
+builder.Services.AddScoped<ISpaceService, SpaceService>();
+
 builder.Services.AddSingleton<IKeyService, KeyService>();
 
 builder.Services.AddSingleton<IConfigureOptions<CookieAuthenticationOptions>, ConfigureCookieOptions>();
 builder.Services.AddSingleton<IConfigureOptions<OpenIdConnectOptions>, ConfigureOidcOptions>();
 
 var authBuilder = builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie();
+    .AddCookie()
+    .AddScheme<AuthenticationSchemeOptions, BasicAuthHandler>(BasicAuthHandler.SchemeName, null);
 
 var oidcOptions = builder.Configuration.GetSection(OAuthConfig.ConfigKey).Get<OAuthConfig>();
 
@@ -57,7 +70,16 @@ foreach (var idp in oidcOptions.IdentityProviders)
     });
 }
 
-builder.Services.AddAuthorization();
+builder.Services.AddSingleton<IAuthorizationHandler, TokenPermissionHandler>();
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("WebDavFiles", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.Requirements.Add(new TokenPermissionRequirement(EUserAppAccessTokenPermissions.Files));
+    });
+});
 
 builder.Services.AddDataProtection().SetApplicationName(DATA_PROTECTION_APPLICATION_NAME).PersistKeysToDbContext<AppDbContext>();
 

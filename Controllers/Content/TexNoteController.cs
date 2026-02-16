@@ -19,7 +19,7 @@ public class TexNoteController(AppDbContext db, IAccessPolicyHelperService acces
     {
         if (body.SpaceId != null)
         {
-            var isAllowed = await accessHelper.CheckAccessPolicy(RessourceAccessPolicy.SpaceMembers, RessourceAccessIntention.Write,
+            var isAllowed = await accessHelper.CheckAccessPolicy(RessourceAccessPolicy.Members, AccessIntent.Write,
                 (Guid)body.SpaceId, this.User, body.SpaceId);
 
             if (!isAllowed)
@@ -57,7 +57,7 @@ public class TexNoteController(AppDbContext db, IAccessPolicyHelperService acces
             return new NotFoundApiException();
         }
 
-        var isAllowed = await accessHelper.CheckAccessPolicy(post.Visibility, RessourceAccessIntention.Write, post.Id, this.User, post.SpaceId);
+        var isAllowed = await accessHelper.CheckAccessPolicy(post.Visibility, AccessIntent.Write, post.Id, this.User, post.SpaceId);
 
         if (!isAllowed)
         {

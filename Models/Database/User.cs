@@ -58,9 +58,9 @@ public class UserRefreshSession {
 [Flags]
 public enum EUserAppAccessTokenPermissions
 {
-	Files,
-	Calendar,
-	Contacts
+	Files = 1,
+	Calendar = 2,
+	Contacts = 4
 }
 
 public class UserAppAccessToken

@@ -16,7 +16,7 @@ public interface IFileStorageService
 
     Task<Result<FileDownloadResult>> GetFile(Guid fileId, CancellationToken cancellationToken = default);
 
-    Task<bool> DeleteFile(Guid fileId, CancellationToken cancellationToken = default);
+    Task<bool> DeleteFile(FileMetadata file, CancellationToken cancellationToken = default);
 }
 
 public class FileStorageService : IFileStorageService
@@ -152,16 +152,8 @@ public class FileStorageService : IFileStorageService
         });
     }
     
-    public async Task<bool> DeleteFile(Guid fileId, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteFile(FileMetadata file, CancellationToken cancellationToken = default)
     {
-        var file = await _dbContext.Files
-            .FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
-        
-        if (file == null)
-        {
-            return false;
-        }
-        
         // Physische Datei löschen (asynchron im Hintergrund)
         var fullPath = Path.Combine(_config.StoragePath, GenerateStoragePath(file.Id, Path.GetExtension(file.FileName)));
         
@@ -177,8 +169,11 @@ public class FileStorageService : IFileStorageService
             _logger.LogError(ex, "Failed to delete physical file: {Path}", fullPath);
             return false;
         }
+        
+        _dbContext.Files.Remove(file);
+        var deleted = await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return true;
+        return deleted > 0;
     }
 
     public static string GenerateStoragePath(Guid fileId, string extension)

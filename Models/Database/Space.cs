@@ -13,6 +13,8 @@ public class Space
         this.Description = description;
         this.OwnerUserId = ownerUserId;
         this.CreatedAt = DateTime.UtcNow;
+        this.Visibility = RessourceAccessPolicy.Shared;
+        this.AllowJoins = true;
     }
     
     public Guid Id { get; set; }
@@ -25,4 +27,8 @@ public class Space
     public DateTime CreatedAt { get; set; }
     
     public List<User> Members { get; set; }
+    
+    public RessourceAccessPolicy Visibility { get; set; }
+    
+    public bool AllowJoins { get; set; }
 }
