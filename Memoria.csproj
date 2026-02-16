@@ -29,4 +29,13 @@
       <Folder Include="Authentication\" />
     </ItemGroup>
 
+    <ItemGroup>
+      <EmbeddedResource Update="Ressources\Controllers\WebDavController.de.resx">
+        <Generator>ResXFileCodeGenerator</Generator>
+      </EmbeddedResource>
+      <EmbeddedResource Update="Ressources\Controllers\WebDavController.en.resx">
+        <Generator>ResXFileCodeGenerator</Generator>
+      </EmbeddedResource>
+    </ItemGroup>
+
 </Project>

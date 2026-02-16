@@ -4,6 +4,7 @@ using Memoria.Controllers;
 using Memoria.Models;
 using Memoria.Models.Database;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Localization;
 
 namespace Memoria.Services.WebDav;
 
@@ -15,7 +16,7 @@ public static class WebDavHelpers
 	/// <summary>
 	/// Creates the three policy folders (private, shared, public) as XML responses
 	/// </summary>
-	public static List<XElement> CreatePolicyFolderResponses(EEntityTypes basePath, string entityName, DateTime createdAt, bool includePrivate)
+	public static List<XElement> CreatePolicyFolderResponses(EEntityTypes basePath, string entityName, DateTime createdAt, bool includePrivate, IStringLocalizer<WebDavController> localizer)
 	{
 		var responses = new List<XElement>();
 
@@ -23,20 +24,20 @@ public static class WebDavHelpers
 		{
 			responses.Add(WebDavXmlBuilder.CreateCollection(
 				WebDavXmlBuilder.BuildHref(basePath.ToString().ToLower(), entityName, "private"),
-				"Private",
+				localizer["Policy.Private"],
 				createdAt
 			));
 		}
 
 		responses.Add(WebDavXmlBuilder.CreateCollection(
 			WebDavXmlBuilder.BuildHref(basePath.ToString().ToLower(), entityName, "shared"),
-			"Shared",
+			localizer["Policy.Shared"],
 			createdAt
 		));
 
 		responses.Add(WebDavXmlBuilder.CreateCollection(
 			WebDavXmlBuilder.BuildHref(basePath.ToString().ToLower(), entityName, "public"),
-			"Public",
+			localizer["Policy.Public"],
 			createdAt
 		));
 
@@ -80,7 +81,7 @@ public static class WebDavHelpers
 		string fileName,
 		CancellationToken ct)
 	{
-		var query = db.Files.Cacheable().AsNoTracking()
+		var query = db.Files.Cacheable()
 			.Where(f => f.FileName == fileName && f.AccessPolicy == policy && f.OwnerUserId == ownerId);
 
 		if (spaceId.HasValue)

@@ -37,6 +37,16 @@ builder.Services.AddControllers().AddJsonOptions(options => {
 
 builder.Services.AddOpenApi();
 
+builder.Services.AddLocalization(options => options.ResourcesPath = "Ressources");
+builder.Services.Configure<RequestLocalizationOptions>(options =>
+{
+    var supportedCultures = new[] { "en", "en-US", "de", "de-DE" };
+    options.SetDefaultCulture(supportedCultures[0])
+        .AddSupportedCultures(supportedCultures)
+        .AddSupportedUICultures(supportedCultures);
+});
+
+
 builder.Services.Configure<DatabaseConfig>(builder.Configuration.GetSection(DatabaseConfig.ConfigKey));
 builder.Services.Configure<OAuthConfig>(builder.Configuration.GetSection(OAuthConfig.ConfigKey));
 builder.Services.Configure<SessionConfig>(builder.Configuration.GetSection(SessionConfig.ConfigKey));
@@ -112,6 +122,8 @@ else
 {
     app.UseForwardedHeaders();
 }
+
+app.UseRequestLocalization();
 
 app.UseRouting();
 
