@@ -6,6 +6,7 @@ using Memoria.Middlewares;
 using Memoria.Models.Config;
 using Memoria.Models.Database;
 using Memoria.Services;
+using Memoria.Services.WebDav;
 using Memoria.Setup;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -63,6 +64,7 @@ builder.Services.AddScoped<IAccessPolicyHelperService, AccessPolicyHelperService
 builder.Services.AddScoped<ISpaceService, SpaceService>();
 
 builder.Services.AddSingleton<IKeyService, KeyService>();
+builder.Services.AddSingleton<IWebDavLockService, WebDavLockService>();
 
 builder.Services.AddSingleton<IConfigureOptions<CookieAuthenticationOptions>, ConfigureCookieOptions>();
 builder.Services.AddSingleton<IConfigureOptions<OpenIdConnectOptions>, ConfigureOidcOptions>();

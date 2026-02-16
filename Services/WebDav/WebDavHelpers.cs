@@ -3,6 +3,7 @@ using EFCoreSecondLevelCacheInterceptor;
 using Memoria.Controllers;
 using Memoria.Models;
 using Memoria.Models.Database;
+using Memoria.Models.WebDav;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Localization;
 
@@ -76,11 +77,13 @@ public static class WebDavHelpers
 		IEnumerable<FileMetadata> files,
 		string basePath,
 		string entityName,
-		EEntityPolicy policyFolder)
+		EEntityPolicy policyFolder,
+		Func<Guid, List<LockInfo>>? getLocksForFile = null)
 	{
 		return (from file in files
 			let href = WebDavXmlBuilder.BuildHref(false, basePath, entityName, policyFolder.ToString().ToLower(), file.FileName)
-			select WebDavXmlBuilder.CreateFile(href, file)).ToList();
+			let locks = getLocksForFile?.Invoke(file.Id)
+			select WebDavXmlBuilder.CreateFile(href, file, locks)).ToList();
 	}
 	
 	public static async Task<FileMetadata?> FindFile(

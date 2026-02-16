@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using Memoria.Models.Database;
+using Memoria.Models.WebDav;
 
 namespace Memoria.Services.WebDav;
 
@@ -46,22 +47,82 @@ public static class WebDavXmlBuilder
 		);
 	}
 
-	public static XElement CreateFile(string href, FileMetadata file)
+	public static XElement CreateFile(string href, FileMetadata file, List<LockInfo>? activeLocks = null)
 	{
+		var props = new List<XElement>
+		{
+			new XElement(Dav + "displayname", file.FileName),
+			new XElement(Dav + "resourcetype"),
+			new XElement(Dav + "getcontentlength", file.SizeInBytes),
+			new XElement(Dav + "getcontenttype", file.ContentType),
+			new XElement(Dav + "creationdate", file.UploadedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")),
+			new XElement(Dav + "getlastmodified", file.UploadedAt.ToString("R")),
+			new XElement(Dav + "getetag", $"\"{file.FileHash}\""),
+			CreateSupportedLockProperty(),
+			CreateLockDiscoveryProperty(activeLocks, href)
+		};
+
 		return new XElement(Dav + "response",
 			new XElement(Dav + "href", href),
 			new XElement(Dav + "propstat",
-				new XElement(Dav + "prop",
-					new XElement(Dav + "displayname", file.FileName),
-					new XElement(Dav + "resourcetype"),
-					new XElement(Dav + "getcontentlength", file.SizeInBytes),
-					new XElement(Dav + "getcontenttype", file.ContentType),
-					new XElement(Dav + "creationdate", file.UploadedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")),
-					new XElement(Dav + "getlastmodified", file.UploadedAt.ToString("R")),
-					new XElement(Dav + "getetag", $"\"{file.FileHash}\"")
-				),
+				new XElement(Dav + "prop", props),
 				new XElement(Dav + "status", "HTTP/1.1 200 OK")
 			)
 		);
+	}
+
+	/// <summary>
+	/// Creates the supportedlock property (RFC 4918 Section 15.10)
+	/// </summary>
+	private static XElement CreateSupportedLockProperty()
+	{
+		return new XElement(Dav + "supportedlock",
+			new XElement(Dav + "lockentry",
+				new XElement(Dav + "lockscope", new XElement(Dav + "exclusive")),
+				new XElement(Dav + "locktype", new XElement(Dav + "write"))
+			),
+			new XElement(Dav + "lockentry",
+				new XElement(Dav + "lockscope", new XElement(Dav + "shared")),
+				new XElement(Dav + "locktype", new XElement(Dav + "write"))
+			)
+		);
+	}
+
+	/// <summary>
+	/// Creates the lockdiscovery property (RFC 4918 Section 15.8)
+	/// </summary>
+	private static XElement CreateLockDiscoveryProperty(List<LockInfo>? locks, string href)
+	{
+		if (locks == null || !locks.Any())
+			return new XElement(Dav + "lockdiscovery");
+
+		var activeLocks = locks.Select(lockInfo =>
+		{
+			var timeout = lockInfo.TimeoutSeconds.HasValue
+				? $"Second-{lockInfo.TimeoutSeconds.Value}"
+				: "Infinite";
+
+			return new XElement(Dav + "activelock",
+				new XElement(Dav + "locktype", new XElement(Dav + "write")),
+				new XElement(Dav + "lockscope",
+					lockInfo.Scope == LockScope.Exclusive
+						? new XElement(Dav + "exclusive")
+						: new XElement(Dav + "shared")
+				),
+				new XElement(Dav + "depth", lockInfo.Depth),
+				lockInfo.OwnerInfo != null
+					? new XElement(Dav + "owner", lockInfo.OwnerInfo)
+					: null,
+				new XElement(Dav + "timeout", timeout),
+				new XElement(Dav + "locktoken",
+					new XElement(Dav + "href", lockInfo.LockToken)
+				),
+				new XElement(Dav + "lockroot",
+					new XElement(Dav + "href", href)
+				)
+			);
+		});
+
+		return new XElement(Dav + "lockdiscovery", activeLocks);
 	}
 }

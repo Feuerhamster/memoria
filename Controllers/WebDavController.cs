@@ -28,6 +28,7 @@ public class WebDavController(
 	IFileStorageService fileService,
 	IAccessPolicyHelperService accessControl,
 	ISpaceService spaceService,
+	IWebDavLockService lockService,
 	IStringLocalizer<WebDavController> localizer) : ControllerBase
 {
 	private static readonly FileExtensionContentTypeProvider ContentTypeProvider = new();
@@ -36,8 +37,8 @@ public class WebDavController(
 	[AllowAnonymous]
 	public IActionResult Options()
 	{
-		Response.Headers["DAV"] = "1";
-		Response.Headers.Allow = "OPTIONS, PROPFIND, GET, PUT, DELETE, MOVE, COPY";
+		Response.Headers["DAV"] = "1, 2"; // Class 1 and Class 2 support
+		Response.Headers.Allow = "OPTIONS, PROPFIND, GET, PUT, DELETE, MOVE, COPY, LOCK, UNLOCK";
 		return Ok();
 	}
 
@@ -127,7 +128,8 @@ public class WebDavController(
 		if (resolved?.File == null) return NotFound();
 
 		var href = WebDavXmlBuilder.BuildHref(false, entityType.ToString().ToLower(), entityName, policy.ToString().ToLower(), fileName);
-		return MultiStatus(new List<XElement>([WebDavXmlBuilder.CreateFile(href, resolved.File)]));
+		var locks = lockService.GetLocksForFile(resolved.File.Id);
+		return MultiStatus(new List<XElement>([WebDavXmlBuilder.CreateFile(href, resolved.File, locks)]));
 	}
 	
 	[HttpPut("{entityType}/{entityName}/{policyFolder}/{fileName}")]
@@ -153,6 +155,10 @@ public class WebDavController(
 			// Validate ETag preconditions (If-Match)
 			var etagError = ValidateETag(existingFile.FileHash, isModificationRequest: true);
 			if (etagError != null) return etagError;
+
+			// Validate lock access
+			var lockError = ValidateLockAccess(existingFile.Id, userId);
+			if (lockError != null) return lockError;
 
 			await fileService.DeleteFile(existingFile, ct);
 		}
@@ -182,8 +188,101 @@ public class WebDavController(
 		var etagError = ValidateETag(resolved.File.FileHash, isModificationRequest: true);
 		if (etagError != null) return etagError;
 
+		// Validate lock access
+		var userId = User.GetUserId();
+		var lockError = ValidateLockAccess(resolved.File.Id, userId);
+		if (lockError != null) return lockError;
+
 		await fileService.DeleteFile(resolved.File, ct);
 		return NoContent();
+	}
+
+	[AcceptVerbs("LOCK")]
+	[Route("{entityType}/{entityName}/{policy}/{fileName}")]
+	public async Task<IActionResult> LockFile(EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName, CancellationToken ct)
+	{
+		var resolved = await ResolveFile(entityType, entityName, policy, fileName, ct);
+		if (resolved?.File == null) return NotFound();
+
+		var userId = User.GetUserId();
+
+		// Check write access
+		if (!await accessControl.CheckAccessPolicy(resolved.File.AccessPolicy, AccessIntent.Write, resolved.File.OwnerUserId, User, resolved.File.SpaceId))
+			return Forbid();
+
+		try
+		{
+			// Parse LOCK request body
+			var lockRequest = await ParseLockRequest();
+			if (lockRequest == null)
+				return BadRequest(new { Error = "Invalid LOCK request" });
+
+			var (scope, type, depth, ownerInfo, timeoutSeconds) = lockRequest.Value;
+
+			// Create lock
+			var lockInfo = lockService.CreateLock(
+				resolved.File.Id,
+				userId,
+				ownerInfo,
+				scope,
+				type,
+				depth,
+				timeoutSeconds
+			);
+
+			// Build response
+			var response = BuildLockResponse(lockInfo, Request.Path.Value!);
+
+			Response.Headers["Lock-Token"] = $"<{lockInfo.LockToken}>";
+			Response.StatusCode = 200;
+			Response.ContentType = "application/xml; charset=utf-8";
+
+			return Content(response, "application/xml; charset=utf-8");
+		}
+		catch (InvalidOperationException ex)
+		{
+			return StatusCode(423, new { Error = "Locked", Detail = ex.Message }); // 423 Locked
+		}
+	}
+
+	[AcceptVerbs("UNLOCK")]
+	[Route("{entityType}/{entityName}/{policy}/{fileName}")]
+	public async Task<IActionResult> UnlockFile(EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName, CancellationToken ct)
+	{
+		var resolved = await ResolveFile(entityType, entityName, policy, fileName, ct);
+		if (resolved?.File == null) return NotFound();
+
+		// Get Lock-Token from header
+		var lockTokenHeader = Request.Headers["Lock-Token"].FirstOrDefault();
+		if (string.IsNullOrEmpty(lockTokenHeader))
+			return BadRequest(new { Error = "Missing Lock-Token header" });
+
+		// Parse token (format: <opaquelocktoken:uuid>)
+		var lockToken = lockTokenHeader.Trim('<', '>');
+
+		var lockInfo = lockService.GetLockByToken(lockToken);
+		if (lockInfo == null)
+			return StatusCode(409, new { Error = "Conflict", Detail = "Lock token not found" }); // 409 Conflict
+
+		// Verify lock belongs to this file
+		if (lockInfo.FileId != resolved.File.Id)
+			return StatusCode(409, new { Error = "Conflict", Detail = "Lock token does not match this resource" });
+
+		// Verify user owns the lock or has write access
+		var userId = User.GetUserId();
+		if (!lockInfo.IsOwnedBy(userId))
+		{
+			if (!await accessControl.CheckAccessPolicy(resolved.File.AccessPolicy, AccessIntent.Write, resolved.File.OwnerUserId, User, resolved.File.SpaceId))
+				return Forbid();
+		}
+
+		// Remove lock
+		if (lockService.RemoveLock(lockToken))
+		{
+			return NoContent();
+		}
+
+		return StatusCode(409, new { Error = "Conflict", Detail = "Failed to remove lock" });
 	}
 
 	/// <summary>
@@ -218,6 +317,11 @@ public class WebDavController(
 		if (!await accessControl.CheckAccessPolicy(sourceFile.AccessPolicy, AccessIntent.Write, sourceFile.OwnerUserId, User, sourceFile.SpaceId))
 			return Forbid();
 
+		// Validate lock access on source
+		var userId = User.GetUserId();
+		var lockError = ValidateLockAccess(sourceFile.Id, userId);
+		if (lockError != null) return lockError;
+
 		// Parse destination
 		var destSegments = ParseDestinationHeader();
 		if (destSegments == null) return BadRequest();
@@ -234,7 +338,6 @@ public class WebDavController(
 		if (destPolicy == null) return BadRequest();
 
 		// Check write access on destination
-		var userId = User.GetUserId();
 		if (destParams.Value.entityType == EEntityTypes.Users && destCtx.OwnerId != userId) return Forbid();
 		if (destParams.Value.entityType == EEntityTypes.Spaces && !await accessControl.CheckSpaceAccess(destCtx.SpaceId!.Value, userId, ct))
 			return Forbid();
@@ -262,6 +365,8 @@ public class WebDavController(
 	[Route("{entityType}/{entityName}/{policy}/{fileName}")]
 	public async Task<IActionResult> CopyFile(EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName, CancellationToken ct)
 	{
+		var userId = User.GetUserId();
+
 		// Get source file stream
 		var sourceResult = await GetFile(entityType, entityName, policy, fileName, ct);
 		if (sourceResult == null) return NotFound();
@@ -282,7 +387,6 @@ public class WebDavController(
 		if (destPolicy == null) return BadRequest();
 
 		// Check write access on destination
-		var userId = User.GetUserId();
 		if (destParams.Value.entityType == EEntityTypes.Users && destCtx.OwnerId != userId) return Forbid();
 		if (destParams.Value.entityType == EEntityTypes.Spaces && !await accessControl.CheckSpaceAccess(destCtx.SpaceId!.Value, userId, ct))
 			return Forbid();
@@ -407,7 +511,12 @@ public class WebDavController(
 		}
 
 		// Create XML responses for accessible files
-		var fileResponses = WebDavHelpers.CreateFileResponses(accessibleFiles, entityType.ToString().ToLower(), name, policyFolder);
+		var fileResponses = WebDavHelpers.CreateFileResponses(
+			accessibleFiles,
+			entityType.ToString().ToLower(),
+			name,
+			policyFolder,
+			fileId => lockService.GetLocksForFile(fileId));
 		responses.AddRange(fileResponses);
 
 		return responses;
@@ -470,6 +579,32 @@ public class WebDavController(
 	// --- Helper Methods ---
 
 	/// <summary>
+	/// Validates lock access for a file. Returns error result if locked and user doesn't have access.
+	/// </summary>
+	private IActionResult? ValidateLockAccess(Guid fileId, Guid userId)
+	{
+		// Parse If header for lock tokens (RFC 4918 Section 10.4)
+		var ifHeader = Request.Headers["If"].FirstOrDefault();
+		string? lockToken = null;
+
+		if (!string.IsNullOrEmpty(ifHeader))
+		{
+			// Simple parsing: look for (<opaquelocktoken:...>)
+			var match = System.Text.RegularExpressions.Regex.Match(ifHeader, @"<(opaquelocktoken:[^>]+)>");
+			if (match.Success)
+				lockToken = match.Groups[1].Value;
+		}
+
+		// Validate lock access
+		if (!lockService.ValidateLockAccess(fileId, userId, lockToken))
+		{
+			return StatusCode(423, new { Error = "Locked", Detail = "Resource is locked" }); // 423 Locked
+		}
+
+		return null;
+	}
+
+	/// <summary>
 	/// Validates ETag preconditions (If-Match, If-None-Match) for a file.
 	/// Returns an error result if validation fails, otherwise null.
 	/// </summary>
@@ -502,6 +637,108 @@ public class WebDavController(
 		}
 
 		return null; // Validation passed
+	}
+
+	/// <summary>
+	/// Parses a LOCK request body (RFC 4918 Section 9.10)
+	/// </summary>
+	private async Task<(LockScope Scope, LockType Type, string Depth, string? OwnerInfo, int? TimeoutSeconds)?> ParseLockRequest()
+	{
+		try
+		{
+			Request.EnableBuffering();
+			var doc = await XDocument.LoadAsync(Request.Body, LoadOptions.None, CancellationToken.None);
+			Request.Body.Position = 0;
+
+			var davNs = XNamespace.Get("DAV:");
+			var root = doc.Root;
+			if (root == null) return null;
+
+			// Parse lockscope
+			var scopeElement = root.Descendants(davNs + "lockscope").FirstOrDefault();
+			var scope = scopeElement?.Elements().FirstOrDefault()?.Name.LocalName switch
+			{
+				"exclusive" => LockScope.Exclusive,
+				"shared" => LockScope.Shared,
+				_ => LockScope.Exclusive
+			};
+
+			// Parse locktype
+			var typeElement = root.Descendants(davNs + "locktype").FirstOrDefault();
+			var type = typeElement?.Elements().FirstOrDefault()?.Name.LocalName switch
+			{
+				"write" => LockType.Write,
+				_ => LockType.Write
+			};
+
+			// Parse depth (from header, default to 0)
+			var depth = Request.Headers["Depth"].FirstOrDefault() ?? "0";
+
+			// Parse owner (optional)
+			var ownerElement = root.Descendants(davNs + "owner").FirstOrDefault();
+			var ownerInfo = ownerElement?.Value;
+
+			// Parse timeout (from header)
+			var timeoutHeader = Request.Headers["Timeout"].FirstOrDefault();
+			int? timeoutSeconds = null;
+			if (!string.IsNullOrEmpty(timeoutHeader))
+			{
+				// Format: "Second-3600" or "Infinite"
+				if (timeoutHeader.StartsWith("Second-", StringComparison.OrdinalIgnoreCase))
+				{
+					if (int.TryParse(timeoutHeader[7..], out var seconds))
+						timeoutSeconds = seconds;
+				}
+			}
+
+			return (scope, type, depth, ownerInfo, timeoutSeconds);
+		}
+		catch
+		{
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// Builds a LOCK response XML (RFC 4918 Section 9.10.2)
+	/// </summary>
+	private string BuildLockResponse(LockInfo lockInfo, string href)
+	{
+		var davNs = XNamespace.Get("DAV:");
+
+		var timeout = lockInfo.TimeoutSeconds.HasValue
+			? $"Second-{lockInfo.TimeoutSeconds.Value}"
+			: "Infinite";
+
+		var doc = new XDocument(
+			new XDeclaration("1.0", "utf-8", null),
+			new XElement(davNs + "prop",
+				new XAttribute(XNamespace.Xmlns + "D", "DAV:"),
+				new XElement(davNs + "lockdiscovery",
+					new XElement(davNs + "activelock",
+						new XElement(davNs + "locktype", new XElement(davNs + "write")),
+						new XElement(davNs + "lockscope",
+							lockInfo.Scope == LockScope.Exclusive
+								? new XElement(davNs + "exclusive")
+								: new XElement(davNs + "shared")
+						),
+						new XElement(davNs + "depth", lockInfo.Depth),
+						lockInfo.OwnerInfo != null
+							? new XElement(davNs + "owner", lockInfo.OwnerInfo)
+							: null,
+						new XElement(davNs + "timeout", timeout),
+						new XElement(davNs + "locktoken",
+							new XElement(davNs + "href", lockInfo.LockToken)
+						),
+						new XElement(davNs + "lockroot",
+							new XElement(davNs + "href", href)
+						)
+					)
+				)
+			)
+		);
+
+		return doc.Declaration + Environment.NewLine + doc.Root!.ToString(SaveOptions.DisableFormatting);
 	}
 
 	private static string[] ParsePath(string? path) =>
