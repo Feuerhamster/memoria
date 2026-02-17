@@ -17,9 +17,6 @@ using Microsoft.Extensions.Localization;
 
 namespace Memoria.Controllers;
 
-public enum EEntityTypes { Spaces, Users }
-public enum EEntityPolicy { Public, Shared, Private }
-
 [Route("webdav")]
 [Authorize(AuthenticationSchemes = BasicAuthHandler.SchemeName, Policy = "WebDavFiles")]
 [EnsureWwwAuthenticate]
@@ -45,60 +42,55 @@ public class WebDavController(
 	[AcceptVerbs("PROPFIND")]
 	[ValidateWebDavDepth]
 	[Route("")]
-	public async Task<IActionResult> RootDirectory()
+	public async Task<IActionResult> RootDirectory(CancellationToken ct)
 	{
 		var depth = GetDepth();
 
 		var responses = new List<XElement> { WebDavXmlBuilder.CreateCollection("/webdav/", "WebDAV") };
 		if (depth < 1) return MultiStatus(responses);
-		responses.Add(WebDavXmlBuilder.CreateCollection("/webdav/users/", localizer["Users"]));
-		responses.Add(WebDavXmlBuilder.CreateCollection("/webdav/spaces/", localizer["Spaces"]));
 		
+		var userId = this.User.GetUserId();
+		var memberSpaces = await spaceService.GetMemberSpaces(userId);
+		var publicSpaces = await spaceService.GetPublicSpaces(RessourceAccessPolicy.Members);
+
+		var spaces = new List<Space>([..memberSpaces, ..publicSpaces])
+			.GroupBy(s => s.Id)
+			.Select(g => g.First())
+			.ToList();
+
+		responses.AddRange(spaces.Select(space => WebDavXmlBuilder.CreateCollection(
+			WebDavXmlBuilder.BuildHref(space.Name),
+			space.Name,
+			space.CreatedAt)));
+
 		return MultiStatus(responses);
 	}
 
-	[AcceptVerbs("PROPFIND")]
-	[ValidateWebDavDepth]
-	[Route("users")]
-	public async Task<IActionResult> ListUsers(CancellationToken ct)
-	{
-		var depth = GetDepth();
-		return MultiStatus(await ListUsers(depth, ct));
-	}
 	
 	[AcceptVerbs("PROPFIND")]
 	[ValidateWebDavDepth]
-	[Route("spaces")]
-	public async Task<IActionResult> ListSpaces(CancellationToken ct)
+	[Route("{spaceName}")]
+	public async Task<IActionResult> PolicyDirectory(string spaceName, CancellationToken ct)
 	{
 		var depth = GetDepth();
-		return MultiStatus(await ListSpaces(depth, ct));
-	}
-	
-	[AcceptVerbs("PROPFIND")]
-	[ValidateWebDavDepth]
-	[Route("{entityType}/{entityName}")]
-	public async Task<IActionResult> PolicyDirectory(EEntityTypes entityType, string entityName, CancellationToken ct)
-	{
-		var depth = GetDepth();
-		var res = await ShowEntityFolder(entityType, entityName, depth, ct);
+		var res = await ShowSpaceFolder(spaceName, depth, ct);
 		return res == null ? NotFound() : MultiStatus(res);
 	}
 	
 	[AcceptVerbs("PROPFIND")]
 	[ValidateWebDavDepth]
-	[Route("{entityType}/{entityName}/{policy}")]
-	public async Task<IActionResult> GetEntityFileListByPolicy(EEntityTypes entityType, string entityName, EEntityPolicy policy, CancellationToken ct)
+	[Route("{spaceName}/{policy}")]
+	public async Task<IActionResult> GetSpaceFileListByPolicy(string spaceName, RessourceAccessPolicy policy, CancellationToken ct)
 	{
 		var depth = GetDepth();
-		var res = await ListEntityFiles(entityType, entityName, policy, depth, ct);
+		var res = await ListSpaceFiles(spaceName, policy, depth, ct);
 		return res == null ? NotFound() : MultiStatus(res);
 	}
 
-	[HttpGet("{entityType}/{entityName}/{policy}/{fileName}")]
-	public async Task<IActionResult> Get(EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName, CancellationToken ct)
+	[HttpGet("{spaceName}/{policy}/{fileName}")]
+	public async Task<IActionResult> Get(string spaceName, RessourceAccessPolicy policy, string fileName, CancellationToken ct)
 	{
-		var resolved = await this.ResolveFile(entityType, entityName, policy, fileName, ct);
+		var resolved = await this.ResolveFile(spaceName, policy, fileName, ct);
 		if (resolved?.File == null) return NotFound();
 
 		// Validate ETag preconditions
@@ -120,68 +112,67 @@ public class WebDavController(
 	
 	[AcceptVerbs("PROPFIND")]
 	[ValidateWebDavDepth]
-	[Route("{entityType}/{entityName}/{policy}/{fileName}")]
-	public async Task<IActionResult> GetFileMetadata(EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName, CancellationToken ct)
+	[Route("{spaceName}/{policy}/{fileName}")]
+	public async Task<IActionResult> GetFileMetadata(string spaceName, RessourceAccessPolicy policy, string fileName, CancellationToken ct)
 	{
-		var resolved = await this.ResolveFile(entityType, entityName, policy, fileName, ct);
+		var resolved = await this.ResolveFile(spaceName, policy, fileName, ct);
 
 		if (resolved?.File == null) return NotFound();
 
-		var href = WebDavXmlBuilder.BuildHref(false, entityType.ToString().ToLower(), entityName, policy.ToString().ToLower(), fileName);
+		var href = WebDavXmlBuilder.BuildHref(false, spaceName, policy.ToString().ToLower(), fileName);
 		var locks = lockService.GetLocksForFile(resolved.File.Id);
 		return MultiStatus(new List<XElement>([WebDavXmlBuilder.CreateFile(href, resolved.File, locks)]));
 	}
 	
-	[HttpPut("{entityType}/{entityName}/{policyFolder}/{fileName}")]
-	public async Task<IActionResult> UploadFile(EEntityTypes entityType, string entityName, EEntityPolicy policyFolder, string fileName, CancellationToken ct)
+	[HttpPut("{spaceName}/{policy}/{fileName}")]
+	public async Task<IActionResult> UploadFile(string spaceName, RessourceAccessPolicy policy, string fileName, CancellationToken ct)
 	{
 		var userId = User.GetUserId();
 
-		var resolved = await this.ResolveFile(entityType, entityName, policyFolder, fileName, ct);
-		
+		var resolved = await ResolveFile(spaceName, policy, fileName, ct);
 		if (resolved == null) return NotFound();
 
-		var (ctx, policy, existingFile) = resolved;
-		
-		if (existingFile != null)
+		if (resolved.File != null)
 		{
+			// File exists - update it
 			// Check write access
-			if (!await accessControl.CheckAccessPolicy(existingFile.AccessPolicy, AccessIntent.Write, existingFile.OwnerUserId, User,
-				    existingFile.SpaceId))
+			if (!await accessControl.CheckAccessPolicy(resolved.File, AccessIntent.Write, User))
 			{
 				return Forbid();
 			}
 
 			// Validate ETag preconditions (If-Match)
-			var etagError = ValidateETag(existingFile.FileHash, isModificationRequest: true);
+			var etagError = ValidateETag(resolved.File.FileHash, isModificationRequest: true);
 			if (etagError != null) return etagError;
 
 			// Validate lock access
-			var lockError = ValidateLockAccess(existingFile.Id, userId);
+			var lockError = ValidateLockAccess(resolved.File.Id, userId);
 			if (lockError != null) return lockError;
 
-			await fileService.DeleteFile(existingFile, ct);
-		}
-		
-		// Store new file
-		var owner = new RessourceOwnerHelper { UserId = ctx.OwnerId, SpaceId = ctx.SpaceId };
+			// Update existing file (keeps same ID)
+			var updateResult = await fileService.UpdateFile(resolved.File, Request.Body, ct);
 
+			return updateResult.IsFailed ? StatusCode(500) : NoContent();
+		}
+
+		// File doesn't exist - create new one
+		var owner = new RessourceOwnerHelper { UserId = resolved.Space.OwnerUserId, SpaceId = resolved.Space.Id };
 		var contentType = DetermineContentType(fileName);
-		
+
 		var result = await fileService.StoreFile(Request.Body, fileName, contentType, owner, policy, ct);
 
-		return result.IsFailed ? StatusCode(500) : (existingFile != null ? NoContent() : StatusCode(201));
+		return result.IsFailed ? StatusCode(500) : StatusCode(201);
 	}
 
 	[AcceptVerbs("DELETE")]
-	[Route("{entityType}/{entityName}/{policy}/{fileName}")]
-	public async Task<IActionResult> Delete(EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName, CancellationToken ct)
+	[Route("{spaceName}/{policy}/{fileName}")]
+	public async Task<IActionResult> Delete(string spaceName, RessourceAccessPolicy policy, string fileName, CancellationToken ct)
 	{
-		var resolved = await ResolveFile(entityType, entityName, policy, fileName, ct);
+		var resolved = await ResolveFile(spaceName, policy, fileName, ct);
 		if (resolved?.File == null) return NotFound();
 
 		// Check write access
-		if (!await accessControl.CheckAccessPolicy(resolved.File.AccessPolicy, AccessIntent.Write, resolved.File.OwnerUserId, User, resolved.File.SpaceId))
+		if (!await accessControl.CheckAccessPolicy(resolved.File, AccessIntent.Write, User))
 			return Forbid();
 
 		// Validate ETag preconditions (If-Match)
@@ -198,16 +189,16 @@ public class WebDavController(
 	}
 
 	[AcceptVerbs("LOCK")]
-	[Route("{entityType}/{entityName}/{policy}/{fileName}")]
-	public async Task<IActionResult> LockFile(EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName, CancellationToken ct)
+	[Route("{spaceName}/{policy}/{fileName}")]
+	public async Task<IActionResult> LockFile(string spaceName, RessourceAccessPolicy policy, string fileName, CancellationToken ct)
 	{
-		var resolved = await ResolveFile(entityType, entityName, policy, fileName, ct);
+		var resolved = await ResolveFile(spaceName, policy, fileName, ct);
 		if (resolved?.File == null) return NotFound();
 
 		var userId = User.GetUserId();
 
 		// Check write access
-		if (!await accessControl.CheckAccessPolicy(resolved.File.AccessPolicy, AccessIntent.Write, resolved.File.OwnerUserId, User, resolved.File.SpaceId))
+		if (!await accessControl.CheckAccessPolicy(resolved.File, AccessIntent.Write, User))
 			return Forbid();
 
 		try
@@ -231,7 +222,7 @@ public class WebDavController(
 			);
 
 			// Build response
-			var response = BuildLockResponse(lockInfo, Request.Path.Value!);
+			var response = WebDavXmlBuilder.BuildLockResponse(lockInfo, Request.Path.Value!);
 
 			Response.Headers["Lock-Token"] = $"<{lockInfo.LockToken}>";
 			Response.StatusCode = 200;
@@ -246,10 +237,10 @@ public class WebDavController(
 	}
 
 	[AcceptVerbs("UNLOCK")]
-	[Route("{entityType}/{entityName}/{policy}/{fileName}")]
-	public async Task<IActionResult> UnlockFile(EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName, CancellationToken ct)
+	[Route("{spaceName}/{policy}/{fileName}")]
+	public async Task<IActionResult> UnlockFile(string spaceName, RessourceAccessPolicy policy, string fileName, CancellationToken ct)
 	{
-		var resolved = await ResolveFile(entityType, entityName, policy, fileName, ct);
+		var resolved = await ResolveFile(spaceName, policy, fileName, ct);
 		if (resolved?.File == null) return NotFound();
 
 		// Get Lock-Token from header
@@ -272,7 +263,7 @@ public class WebDavController(
 		var userId = User.GetUserId();
 		if (!lockInfo.IsOwnedBy(userId))
 		{
-			if (!await accessControl.CheckAccessPolicy(resolved.File.AccessPolicy, AccessIntent.Write, resolved.File.OwnerUserId, User, resolved.File.SpaceId))
+			if (!await accessControl.CheckAccessPolicy(resolved.File, AccessIntent.Write, User))
 				return Forbid();
 		}
 
@@ -287,15 +278,15 @@ public class WebDavController(
 
 	/// <summary>
 	/// MKCOL is not supported because this WebDAV server uses a fixed virtual folder structure.
-	/// All collections (users, spaces, policy folders) are pre-defined and managed by the application.
+	/// All collections (spaces, policy folders) are pre-defined and managed by the application.
 	/// </summary>
 	[AcceptVerbs("MKCOL")]
-	[Route("{**path}")]
+	[Route("{*path}")]
 	public IActionResult MkCol(string? path = null)
 	{
 		// RFC 4918 Section 9.3: MKCOL creates a collection
 		// Since we have a fixed virtual structure, creating arbitrary collections is not allowed
-		return StatusCode(405, new
+		return StatusCode(StatusCodes.Status403Forbidden, new
 		{
 			Error = "Method Not Allowed",
 			Detail = "This WebDAV server uses a fixed folder structure. Collections cannot be created by clients."
@@ -303,23 +294,20 @@ public class WebDavController(
 	}
 
 	[AcceptVerbs("MOVE")]
-	[Route("{entityType}/{entityName}/{policy}/{fileName}")]
-	public async Task<IActionResult> MoveFile(EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName, CancellationToken ct)
+	[Route("{spaceName}/{policy}/{fileName}")]
+	public async Task<IActionResult> MoveFile(string spaceName, RessourceAccessPolicy policy, string fileName, CancellationToken ct)
 	{
 		// Get source file
-		var resolved = await ResolveFile(entityType, entityName, policy, fileName, ct);
-		if (resolved == null) return NotFound();
-
-		var (sourceCtx, sourcePolicy, sourceFile) = resolved;
-		if (sourceFile == null) return NotFound();
+		var resolved = await ResolveFile(spaceName, policy, fileName, ct);
+		if (resolved?.File == null) return NotFound();
 
 		// Check write access on source
-		if (!await accessControl.CheckAccessPolicy(sourceFile.AccessPolicy, AccessIntent.Write, sourceFile.OwnerUserId, User, sourceFile.SpaceId))
+		if (!await accessControl.CheckAccessPolicy(resolved.File, AccessIntent.Write, User))
 			return Forbid();
 
 		// Validate lock access on source
 		var userId = User.GetUserId();
-		var lockError = ValidateLockAccess(sourceFile.Id, userId);
+		var lockError = ValidateLockAccess(resolved.File.Id, userId);
 		if (lockError != null) return lockError;
 
 		// Parse destination
@@ -329,21 +317,16 @@ public class WebDavController(
 		var destParams = ParseDestinationSegments(destSegments);
 		if (destParams == null) return BadRequest();
 
-		// Resolve destination context
-		var destCtx = await ResolveEntity(destParams.Value.entityType, destParams.Value.entityName, ct);
-		if (destCtx == null) return NotFound();
+		// Resolve destination space
+		var destSpace = await ResolveSpace(destParams.Value.spaceName, ct);
+		if (destSpace == null) return NotFound();
 
-		// Map destination policy
-		var destPolicy = WebDavHelpers.MapPolicyFolder(destParams.Value.policy, destCtx.IsSpaceContext);
-		if (destPolicy == null) return BadRequest();
-
-		// Check write access on destination
-		if (destParams.Value.entityType == EEntityTypes.Users && destCtx.OwnerId != userId) return Forbid();
-		if (destParams.Value.entityType == EEntityTypes.Spaces && !await accessControl.CheckSpaceAccess(destCtx.SpaceId!.Value, userId, ct))
+		// Check write access on destination (must be space member)
+		if (!await accessControl.CheckSpaceMembership(destSpace.Id, userId, ct))
 			return Forbid();
 
 		// Check if destination exists
-		var destFile = await WebDavHelpers.FindFile(db, destCtx.SpaceId, destCtx.OwnerId, destPolicy.Value, destParams.Value.fileName, ct);
+		var destFile = await WebDavHelpers.FindFile(db, destSpace.Id, destSpace.OwnerUserId, destParams.Value.policy, destParams.Value.fileName, ct);
 		if (destFile != null)
 		{
 			var overwrite = Request.Headers["Overwrite"].FirstOrDefault() != "F";
@@ -353,22 +336,22 @@ public class WebDavController(
 
 		// Update file metadata
 		// Note: OwnerUserId is preserved during MOVE - only location (SpaceId) and policy change
-		sourceFile.FileName = destParams.Value.fileName;
-		sourceFile.SpaceId = destCtx.SpaceId;
-		sourceFile.AccessPolicy = destPolicy.Value;
+		resolved.File.FileName = destParams.Value.fileName;
+		resolved.File.SpaceId = destSpace.Id;
+		resolved.File.AccessPolicy = destParams.Value.policy;
 		await db.SaveChangesAsync(ct);
 
 		return NoContent();
 	}
 
 	[AcceptVerbs("COPY")]
-	[Route("{entityType}/{entityName}/{policy}/{fileName}")]
-	public async Task<IActionResult> CopyFile(EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName, CancellationToken ct)
+	[Route("{spaceName}/{policy}/{fileName}")]
+	public async Task<IActionResult> CopyFile(string spaceName, RessourceAccessPolicy policy, string fileName, CancellationToken ct)
 	{
 		var userId = User.GetUserId();
 
 		// Get source file stream
-		var sourceResult = await GetFile(entityType, entityName, policy, fileName, ct);
+		var sourceResult = await GetFile(spaceName, policy, fileName, ct);
 		if (sourceResult == null) return NotFound();
 
 		// Parse destination
@@ -378,21 +361,16 @@ public class WebDavController(
 		var destParams = ParseDestinationSegments(destSegments);
 		if (destParams == null) return BadRequest();
 
-		// Resolve destination context
-		var destCtx = await ResolveEntity(destParams.Value.entityType, destParams.Value.entityName, ct);
-		if (destCtx == null) return NotFound();
+		// Resolve destination space
+		var destSpace = await ResolveSpace(destParams.Value.spaceName, ct);
+		if (destSpace == null) return NotFound();
 
-		// Map destination policy
-		var destPolicy = WebDavHelpers.MapPolicyFolder(destParams.Value.policy, destCtx.IsSpaceContext);
-		if (destPolicy == null) return BadRequest();
-
-		// Check write access on destination
-		if (destParams.Value.entityType == EEntityTypes.Users && destCtx.OwnerId != userId) return Forbid();
-		if (destParams.Value.entityType == EEntityTypes.Spaces && !await accessControl.CheckSpaceAccess(destCtx.SpaceId!.Value, userId, ct))
+		// Check write access on destination (must be space member)
+		if (!await accessControl.CheckSpaceMembership(destSpace.Id, userId, ct))
 			return Forbid();
 
 		// Check if destination exists
-		var destFile = await WebDavHelpers.FindFile(db, destCtx.SpaceId, destCtx.OwnerId, destPolicy.Value, destParams.Value.fileName, ct);
+		var destFile = await WebDavHelpers.FindFile(db, destSpace.Id, destSpace.OwnerUserId, destParams.Value.policy, destParams.Value.fileName, ct);
 		bool created = destFile == null;
 
 		if (destFile != null)
@@ -405,8 +383,8 @@ public class WebDavController(
 		// Copy file (streams directly from source to destination without loading into memory)
 		await using (sourceResult.Value.stream)
 		{
-			var owner = new RessourceOwnerHelper { UserId = destCtx.OwnerId, SpaceId = destCtx.SpaceId };
-			var result = await fileService.StoreFile(sourceResult.Value.stream, destParams.Value.fileName, sourceResult.Value.contentType, owner, destPolicy.Value, ct);
+			var owner = new RessourceOwnerHelper { UserId = destSpace.OwnerUserId, SpaceId = destSpace.Id };
+			var result = await fileService.StoreFile(sourceResult.Value.stream, destParams.Value.fileName, sourceResult.Value.contentType, owner, destParams.Value.policy, ct);
 			if (result.IsFailed) return StatusCode(500);
 		}
 
@@ -415,96 +393,52 @@ public class WebDavController(
 
 	// --- PROPFIND Handlers ---
 
-	private async Task<List<XElement>> ListUsers(int depth, CancellationToken ct)
+	private async Task<List<XElement>?> ShowSpaceFolder(string spaceName, int depth, CancellationToken ct)
 	{
-		var responses = new List<XElement> { WebDavXmlBuilder.CreateCollection("/webdav/users/", "Users") };
-		if (depth < 1) return responses;
-
-		var userId = this.User.GetUserId();
-
-		var users = await db.Users.Cacheable().AsNoTracking().ToListAsync(ct);
-
-		responses.AddRange(users.Select(user => WebDavXmlBuilder.CreateCollection(
-			WebDavXmlBuilder.BuildHref("users", user.Username),
-			user.Id.Equals(userId) ? $"{user.Nickname} ({localizer["MyFiles"]})" : user.Nickname,
-			user.RegisterDate)));
-
-		return responses;
-	}
-
-	private async Task<List<XElement>> ListSpaces(int depth, CancellationToken ct)
-	{
-		var responses = new List<XElement> { WebDavXmlBuilder.CreateCollection("/webdav/spaces/", "Spaces") };
-		if (depth < 1) return responses;
-
-		var userId = this.User.GetUserId();
-
-		var memberSpaces = await spaceService.GetMemberSpaces(userId);
-		var publicSpaces = await spaceService.GetPublicSpaces(RessourceAccessPolicy.Members);
-
-		var spaces = new List<Space>([..memberSpaces, ..publicSpaces])
-			.GroupBy(s => s.Id)
-			.Select(g => g.First())
-			.ToList();
-
-		responses.AddRange(spaces.Select(space => WebDavXmlBuilder.CreateCollection(
-			WebDavXmlBuilder.BuildHref("spaces", space.Name),
-			space.Name,
-			space.CreatedAt)));
-
-		return responses;
-	}
-
-	private async Task<List<XElement>?> ShowEntityFolder(EEntityTypes entityType, string name, int depth, CancellationToken ct)
-	{
-		var ctx = await ResolveEntity(entityType, name, ct);
-		if (ctx == null) return null;
+		var space = await ResolveSpace(spaceName, ct);
+		if (space == null) return null;
 
 		var responses = new List<XElement>
 		{
 			WebDavXmlBuilder.CreateCollection(
-				WebDavXmlBuilder.BuildHref(entityType.ToString().ToLower(), name),
-				ctx.FancyName ?? name,
-				ctx.CreatedAt)
+				WebDavXmlBuilder.BuildHref(spaceName),
+				space.Name,
+				space.CreatedAt)
 		};
 
 		if (depth < 1) return responses;
 
-		var userId =  this.User.GetUserId();
+		var userId = this.User.GetUserId();
+		var isMember = await accessControl.CheckSpaceMembership(space.Id, userId, ct);
 
-		var canSeePrivate = ctx.IsSpaceContext ? await accessControl.CheckSpaceAccess((Guid)ctx.SpaceId, userId, ct) : ctx.OwnerId == userId;
-
-		responses.AddRange(WebDavHelpers.CreatePolicyFolderResponses(entityType, name, ctx.CreatedAt, canSeePrivate, localizer));
+		responses.AddRange(WebDavHelpers.CreatePolicyFolderResponses(spaceName, space.CreatedAt, isMember, localizer));
 
 		return responses;
 	}
 
-	private async Task<List<XElement>?> ListEntityFiles(EEntityTypes entityType, string name, EEntityPolicy policyFolder, int depth, CancellationToken ct)
+	private async Task<List<XElement>?> ListSpaceFiles(string spaceName, RessourceAccessPolicy policy, int depth, CancellationToken ct)
 	{
-		var ctx = await ResolveEntity(entityType, name, ct);
-		if (ctx == null) return null;
-
-		var policy = WebDavHelpers.MapPolicyFolder(policyFolder, ctx.IsSpaceContext);
-		if (policy == null) return null;
+		var space = await ResolveSpace(spaceName, ct);
+		if (space == null) return null;
 
 		var responses = new List<XElement>
 		{
 			WebDavXmlBuilder.CreateCollection(
-				WebDavXmlBuilder.BuildHref(entityType.ToString().ToLower(), name, policyFolder.ToString().ToLower()),
-				policyFolder.ToString(),
-				ctx.CreatedAt)
+				WebDavXmlBuilder.BuildHref(spaceName, policy.ToString().ToLower()),
+				policy.ToString(),
+				space.CreatedAt)
 		};
 
 		if (depth < 1) return responses;
 
 		// Get all files in the policy folder
-		var allFiles = await WebDavHelpers.ListFilesInPolicyFolder(db, ctx.SpaceId, ctx.SpaceId.HasValue ? null : ctx.OwnerId, policy.Value, ct);
+		var allFiles = await WebDavHelpers.ListFilesInPolicyFolder(db, space.Id, policy, ct);
 
 		// Filter by read access permissions
 		var accessibleFiles = new List<FileMetadata>();
 		foreach (var file in allFiles)
 		{
-			if (await accessControl.CheckAccessPolicy(file.AccessPolicy, AccessIntent.Read, file.OwnerUserId, User, file.SpaceId))
+			if (await accessControl.CheckAccessPolicy(file, AccessIntent.Read, User))
 			{
 				accessibleFiles.Add(file);
 			}
@@ -513,67 +447,43 @@ public class WebDavController(
 		// Create XML responses for accessible files
 		var fileResponses = WebDavHelpers.CreateFileResponses(
 			accessibleFiles,
-			entityType.ToString().ToLower(),
-			name,
-			policyFolder,
+			spaceName,
+			policy,
 			fileId => lockService.GetLocksForFile(fileId));
 		responses.AddRange(fileResponses);
 
 		return responses;
 	}
 
-	private async Task<(Stream stream, string contentType, string fileName)?> GetFile(EEntityTypes entityType, string name, EEntityPolicy policyFolder, string fileName, CancellationToken ct)
+	private async Task<(Stream stream, string contentType, string fileName)?> GetFile(string spaceName, RessourceAccessPolicy policy, string fileName, CancellationToken ct)
 	{
-		var resolved = await this.ResolveFile(entityType, name, policyFolder, fileName, ct);
+		var resolved = await ResolveFile(spaceName, policy, fileName, ct);
+		if (resolved?.File == null) return null;
 
-		if (resolved == null) return null;
-
-		var (ctx, policy, file) = resolved;
-		
-		if (file == null) return null;
-		
-		if (!await accessControl.CheckAccessPolicy(file.AccessPolicy, AccessIntent.Read, file.OwnerUserId, User, file.SpaceId))
+		if (!await accessControl.CheckAccessPolicy(resolved.File, AccessIntent.Read, User))
 			return null;
 
-		var result = await fileService.GetFile(file.Id, ct);
-		return result.IsFailed ? null : (result.Value.FileStream, file.ContentType, file.FileName);
+		var result = await fileService.GetFile(resolved.File.Id, ct);
+		return result.IsFailed ? null : (result.Value.FileStream, resolved.File.ContentType, resolved.File.FileName);
 	}
 
-	private async Task<ResolvedFile?> ResolveFile(EEntityTypes entityType, string name, EEntityPolicy policyFolder, string fileName, CancellationToken ct)
+	private async Task<ResolvedFile?> ResolveFile(string spaceName, RessourceAccessPolicy policy, string fileName, CancellationToken ct)
 	{
-		var ctx = await ResolveEntity(entityType, name, ct);
-		if (ctx == null) return null;
+		var space = await ResolveSpace(spaceName, ct);
+		if (space == null) return null;
 
-		var policy = WebDavHelpers.MapPolicyFolder(policyFolder, ctx.IsSpaceContext);
-		if (policy == null) return null;
-		
-		var file = await WebDavHelpers.FindFile(db, ctx.SpaceId, ctx.OwnerId, policy.Value, fileName, ct);
-		
-		return new ResolvedFile((EntityContext)ctx, (RessourceAccessPolicy)policy, file);
+		var file = await WebDavHelpers.FindFile(db, space.Id, space.OwnerUserId, policy, fileName, ct);
+
+		return new ResolvedFile(space, file);
 	}
 
-	// --- Entity Resolution ---
+	// --- Space Resolution ---
 
-	private async Task<EntityContext?> ResolveEntity(EEntityTypes entityType, string name, CancellationToken ct)
+	private async Task<Space?> ResolveSpace(string spaceName, CancellationToken ct)
 	{
-		return entityType switch
-		{
-			EEntityTypes.Users => await GetUserEntityContextCached(name, ct),
-			EEntityTypes.Spaces => await GetSpaceEntityContextCached(name, ct),
-			_ => null
-		};
-	}
-	
-	private async Task<EntityContext?> GetUserEntityContextCached(string username, CancellationToken ct)
-	{
-		var user = await db.Users.Cacheable().AsNoTracking().Select(u => new {u.Id, u.Username, u.RegisterDate, u.Nickname}).Where(u => u.Username == username).FirstOrDefaultAsync(ct);
-		return user != null ? new EntityContext(user.Id, null, user.RegisterDate, user.Nickname) : null;
-	}
-
-	private async Task<EntityContext?> GetSpaceEntityContextCached(string spaceName, CancellationToken ct)
-	{
-		var space = await db.Spaces.Cacheable().AsNoTracking().Select(s => new { s.Id, s.Name, s.CreatedAt, s.OwnerUserId }).Where(s => s.Name == spaceName).FirstOrDefaultAsync(ct);
-		return space != null ? new EntityContext(space.OwnerUserId, space.Id, space.CreatedAt, space.Name) : null;
+		return await db.Spaces.Cacheable().AsNoTracking()
+			.Where(s => s.Name == spaceName)
+			.FirstOrDefaultAsync(ct);
 	}
 
 	// --- Helper Methods ---
@@ -699,55 +609,9 @@ public class WebDavController(
 		}
 	}
 
-	/// <summary>
-	/// Builds a LOCK response XML (RFC 4918 Section 9.10.2)
-	/// </summary>
-	private string BuildLockResponse(LockInfo lockInfo, string href)
-	{
-		var davNs = XNamespace.Get("DAV:");
-
-		var timeout = lockInfo.TimeoutSeconds.HasValue
-			? $"Second-{lockInfo.TimeoutSeconds.Value}"
-			: "Infinite";
-
-		var doc = new XDocument(
-			new XDeclaration("1.0", "utf-8", null),
-			new XElement(davNs + "prop",
-				new XAttribute(XNamespace.Xmlns + "D", "DAV:"),
-				new XElement(davNs + "lockdiscovery",
-					new XElement(davNs + "activelock",
-						new XElement(davNs + "locktype", new XElement(davNs + "write")),
-						new XElement(davNs + "lockscope",
-							lockInfo.Scope == LockScope.Exclusive
-								? new XElement(davNs + "exclusive")
-								: new XElement(davNs + "shared")
-						),
-						new XElement(davNs + "depth", lockInfo.Depth),
-						lockInfo.OwnerInfo != null
-							? new XElement(davNs + "owner", lockInfo.OwnerInfo)
-							: null,
-						new XElement(davNs + "timeout", timeout),
-						new XElement(davNs + "locktoken",
-							new XElement(davNs + "href", lockInfo.LockToken)
-						),
-						new XElement(davNs + "lockroot",
-							new XElement(davNs + "href", href)
-						)
-					)
-				)
-			)
-		);
-
-		return doc.Declaration + Environment.NewLine + doc.Root!.ToString(SaveOptions.DisableFormatting);
-	}
-
 	private static string[] ParsePath(string? path) =>
 		string.IsNullOrWhiteSpace(path) ? [] : path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-
-	/// <summary>
-	/// Parses the Depth header. Defaults to 1 if not specified.
-	/// Note: "infinity" is rejected by ValidateWebDavDepthAttribute before reaching this method.
-	/// </summary>
+	
 	private int GetDepth() => Request.Headers["Depth"].FirstOrDefault() switch
 	{
 		"0" => 0,
@@ -770,19 +634,16 @@ public class WebDavController(
 		return ParsePath(dest);
 	}
 
-	private (EEntityTypes entityType, string entityName, EEntityPolicy policy, string fileName)? ParseDestinationSegments(string[] segments)
+	private (string spaceName, RessourceAccessPolicy policy, string fileName)? ParseDestinationSegments(string[] segments)
 	{
-		if (segments.Length != 4) return null;
+		if (segments.Length != 3) return null;
+		
+		if (!Enum.TryParse<RessourceAccessPolicy>(segments[1], true, out var policy)) return null;
+		
+		var spaceName = Uri.UnescapeDataString(segments[0]);
+		var fileName = Uri.UnescapeDataString(segments[2]);
 
-		// Expected: ["users"|"spaces", entityName, policy, fileName]
-		if (!Enum.TryParse<EEntityTypes>(segments[0], true, out var entityType)) return null;
-		if (!Enum.TryParse<EEntityPolicy>(segments[2], true, out var policy)) return null;
-
-		// Decode URL-encoded segments (handles spaces and special characters)
-		var entityName = Uri.UnescapeDataString(segments[1]);
-		var fileName = Uri.UnescapeDataString(segments[3]);
-
-		return (entityType, entityName, policy, fileName);
+		return (spaceName, policy, fileName);
 	}
 
 	/// <summary>

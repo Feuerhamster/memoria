@@ -42,3 +42,13 @@ public class FileConfig
 	public string StoragePath { get; set; } = "files";
 	public long UploadLimitMb { get; set; } = 12000;
 }
+
+public class OnlyOfficeConfig
+{
+	public const string ConfigKey = "OnlyOffice";
+	public string DocumentServerUrl { get; set; } = string.Empty;
+	public string JwtSecret { get; set; } = string.Empty;
+	public string JwtHeader { get; set; } = "Authorization";
+	public string CallbackUrl { get; set; } = string.Empty;
+	public string? ExternalApiUrl { get; set; }
+}

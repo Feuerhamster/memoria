@@ -125,4 +125,46 @@ public static class WebDavXmlBuilder
 
 		return new XElement(Dav + "lockdiscovery", activeLocks);
 	}
+	
+	/// <summary>
+	/// Builds a LOCK response XML (RFC 4918 Section 9.10.2)
+	/// </summary>
+	public static string BuildLockResponse(LockInfo lockInfo, string href)
+	{
+		var davNs = XNamespace.Get("DAV:");
+
+		var timeout = lockInfo.TimeoutSeconds.HasValue
+			? $"Second-{lockInfo.TimeoutSeconds.Value}"
+			: "Infinite";
+
+		var doc = new XDocument(
+			new XDeclaration("1.0", "utf-8", null),
+			new XElement(davNs + "prop",
+				new XAttribute(XNamespace.Xmlns + "D", "DAV:"),
+				new XElement(davNs + "lockdiscovery",
+					new XElement(davNs + "activelock",
+						new XElement(davNs + "locktype", new XElement(davNs + "write")),
+						new XElement(davNs + "lockscope",
+							lockInfo.Scope == LockScope.Exclusive
+								? new XElement(davNs + "exclusive")
+								: new XElement(davNs + "shared")
+						),
+						new XElement(davNs + "depth", lockInfo.Depth),
+						lockInfo.OwnerInfo != null
+							? new XElement(davNs + "owner", lockInfo.OwnerInfo)
+							: null,
+						new XElement(davNs + "timeout", timeout),
+						new XElement(davNs + "locktoken",
+							new XElement(davNs + "href", lockInfo.LockToken)
+						),
+						new XElement(davNs + "lockroot",
+							new XElement(davNs + "href", href)
+						)
+					)
+				)
+			)
+		);
+
+		return doc.Declaration + Environment.NewLine + doc.Root!.ToString(SaveOptions.DisableFormatting);
+	}
 }

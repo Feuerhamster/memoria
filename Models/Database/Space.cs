@@ -1,6 +1,6 @@
 namespace Memoria.Models.Database;
 
-public class Space
+public class Space : IAccessManagedRessource
 {
     public Space()
     {
@@ -13,7 +13,7 @@ public class Space
         this.Description = description;
         this.OwnerUserId = ownerUserId;
         this.CreatedAt = DateTime.UtcNow;
-        this.Visibility = RessourceAccessPolicy.Shared;
+        this.AccessPolicy = RessourceAccessPolicy.Shared;
         this.AllowJoins = true;
     }
     
@@ -23,12 +23,13 @@ public class Space
     public string? Color { get; set; }
     public Guid? ImageId { get; set; }
     public Guid OwnerUserId { get; set; }
-    
+    public Guid? SpaceId => this.Id;
+
     public DateTime CreatedAt { get; set; }
     
     public List<User> Members { get; set; }
     
-    public RessourceAccessPolicy Visibility { get; set; }
+    public RessourceAccessPolicy AccessPolicy { get; set; }
     
     public bool AllowJoins { get; set; }
 }

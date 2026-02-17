@@ -80,16 +80,19 @@ namespace Memoria.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                    b.Property<int>("AccessPolicy")
+                        .HasColumnType("INTEGER");
 
-                    b.Property<Guid>("CreatorUserId")
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsArchived")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("OwnerUserId")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("ParentId")
@@ -101,12 +104,9 @@ namespace Memoria.Migrations
                     b.Property<Guid?>("SpaceId")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("Visibility")
-                        .HasColumnType("INTEGER");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("CreatorUserId");
+                    b.HasIndex("OwnerUserId");
 
                     b.HasIndex("ParentId");
 
@@ -120,6 +120,9 @@ namespace Memoria.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("AccessPolicy")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("AllowJoins")
                         .HasColumnType("INTEGER");
@@ -143,9 +146,6 @@ namespace Memoria.Migrations
 
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("TEXT");
-
-                    b.Property<int>("Visibility")
-                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -342,7 +342,7 @@ namespace Memoria.Migrations
                 {
                     b.HasOne("Memoria.Models.Database.User", null)
                         .WithMany()
-                        .HasForeignKey("CreatorUserId")
+                        .HasForeignKey("OwnerUserId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .IsRequired();
 

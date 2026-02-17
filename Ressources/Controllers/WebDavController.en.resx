@@ -36,4 +36,7 @@
     <data name="MyFiles" xml:space="preserve">
         <value>My Files</value>
     </data>
+    <data name="Policy.Members" xml:space="preserve">
+        <value>Space Member Files</value>
+    </data>
 </root>

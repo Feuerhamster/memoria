@@ -2,18 +2,18 @@ using Memoria.Models.Request;
 
 namespace Memoria.Models.Database;
 
-public class Post
+public class Post : IAccessManagedRessource
 {
     public Post()
     {
         
     }
 
-    public Post(Guid creatorUserId, CreateTextNotePostRequest create)
+    public Post(Guid ownerUserId, CreateTextNotePostRequest create)
     {
-        this.CreatorUserId = creatorUserId;
+        this.OwnerUserId = ownerUserId;
         this.SpaceId = create.SpaceId;
-        this.Visibility = create.Visibility;
+        this.AccessPolicy = create.Visibility;
         
         this.CreatedAt = DateTime.UtcNow;
         
@@ -32,7 +32,7 @@ public class Post
     }
     
     public Guid Id { get; set; }
-    public Guid? CreatorUserId { get; set; }
+    public Guid OwnerUserId { get; set; }
     public Guid? SpaceId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? ModifiedAt { get; set; }
@@ -43,7 +43,7 @@ public class Post
     public TextNote? TextNote { get; set; }
     public List<FileMetadata>? Files { get; set; }
     
-    public RessourceAccessPolicy Visibility {  get; set; }
+    public RessourceAccessPolicy AccessPolicy {  get; set; }
     
     public bool IsArchived { get; set; }
 }

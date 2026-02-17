@@ -51,6 +51,8 @@ builder.Services.Configure<RequestLocalizationOptions>(options =>
 builder.Services.Configure<DatabaseConfig>(builder.Configuration.GetSection(DatabaseConfig.ConfigKey));
 builder.Services.Configure<OAuthConfig>(builder.Configuration.GetSection(OAuthConfig.ConfigKey));
 builder.Services.Configure<SessionConfig>(builder.Configuration.GetSection(SessionConfig.ConfigKey));
+builder.Services.Configure<FileConfig>(builder.Configuration.GetSection(FileConfig.ConfigKey));
+builder.Services.Configure<OnlyOfficeConfig>(builder.Configuration.GetSection(OnlyOfficeConfig.ConfigKey));
 
 builder.Services.AddConfiguredDbContext();
 
@@ -60,8 +62,11 @@ builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IAccessPolicyHelperService, AccessPolicyHelperService>();
+builder.Services.AddScoped<IOnlyOfficeService, OnlyOfficeService>();
 
 builder.Services.AddScoped<ISpaceService, SpaceService>();
+
+builder.Services.AddHttpClient();
 
 builder.Services.AddSingleton<IKeyService, KeyService>();
 builder.Services.AddSingleton<IWebDavLockService, WebDavLockService>();

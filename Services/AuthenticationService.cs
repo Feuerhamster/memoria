@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.Options;
@@ -52,7 +53,7 @@ public class AuthenticationService : IAuthenticationService {
 		var identity = new ClaimsIdentity([
 			new Claim(CustomClaimNames.UserId, userId),
 			new Claim(CustomClaimNames.SessionId, sessionId),
-			new Claim(CustomClaimNames.IssuedAt, DateTime.UtcNow.ToString()),
+			new Claim(CustomClaimNames.IssuedAt, DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)),
 		], CookieAuthenticationDefaults.AuthenticationScheme);
 
 		var authProps = new AuthenticationProperties

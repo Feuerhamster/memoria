@@ -12,56 +12,63 @@ namespace Memoria.Services;
 public interface IAccessPolicyHelperService
 {
     public Task<bool> CheckAccessPolicy(RessourceAccessPolicy policy, AccessIntent intention, Guid ressourceOwnerId, ClaimsPrincipal user, Guid? spaceId = null);
-    public Task<bool> CheckSpaceAccess(Guid spaceId, Guid userId, CancellationToken ct = default);
+    public Task<bool> CheckAccessPolicy(IAccessManagedRessource ressource, AccessIntent intention, ClaimsPrincipal user);
+    public Task<bool> CheckSpaceMembership(Guid spaceId, Guid userId, CancellationToken ct = default);
 }
 
 public class AccessPolicyHelperService(AppDbContext db) : IAccessPolicyHelperService
 {
     public async Task<bool> CheckAccessPolicy(RessourceAccessPolicy policy, AccessIntent intention, Guid ressourceOwnerId, ClaimsPrincipal user, Guid? spaceId = null)
     {
-        var userId = user.GetUserId();
+        var isAuthenticated = user.Identity?.IsAuthenticated == true;
 
-        // Owner always has full access to their own resources
-        if (ressourceOwnerId.Equals(userId))
+        if (intention == AccessIntent.Read && policy == RessourceAccessPolicy.Public)
         {
             return true;
         }
 
-        if (policy == RessourceAccessPolicy.Public)
+        if (!isAuthenticated)
         {
-            // Public: Everyone can read
-            return intention == AccessIntent.Read;
+            return false;
         }
 
-        if (policy == RessourceAccessPolicy.Shared)
+        var userId = user.GetUserId();
+        var isOwner = ressourceOwnerId.Equals(userId);
+
+        if (intention == AccessIntent.Read)
         {
-            // Shared: Authenticated users can read
-            if (user.Identity != null && user.Identity.IsAuthenticated)
+            return policy switch
             {
-                return intention == AccessIntent.Read;
-            }
-            else
+                RessourceAccessPolicy.Shared  => true,
+                RessourceAccessPolicy.Members => (spaceId.HasValue && await CheckSpaceMembership(spaceId.Value, userId)) || isOwner,
+                RessourceAccessPolicy.Private => isOwner,
+                _ => false
+            };
+        }
+
+        if (intention == AccessIntent.Write)
+        {
+            if (isOwner) return true;
+            
+            return policy switch
             {
-                return false;
-            }
-        }
-
-        if (policy == RessourceAccessPolicy.Members)
-        {
-            if (spaceId == null) return false;
-
-            return await this.CheckSpaceAccess((Guid)spaceId, userId);
-        }
-
-        if (policy == RessourceAccessPolicy.Private)
-        {
-            return ressourceOwnerId.Equals(userId);
+                RessourceAccessPolicy.Public  => spaceId.HasValue && await CheckSpaceMembership(spaceId.Value, userId),
+                RessourceAccessPolicy.Shared  => spaceId.HasValue && await CheckSpaceMembership(spaceId.Value, userId),
+                RessourceAccessPolicy.Members => spaceId.HasValue && await CheckSpaceMembership(spaceId.Value, userId),
+                RessourceAccessPolicy.Private => isOwner,
+                _ => false
+            };
         }
 
         return false;
     }
 
-    public async Task<bool> CheckSpaceAccess(Guid spaceId, Guid userId, CancellationToken ct = default)
+    public Task<bool> CheckAccessPolicy(IAccessManagedRessource ressource, AccessIntent intention, ClaimsPrincipal user)
+    {
+        return this.CheckAccessPolicy(ressource.AccessPolicy, intention, ressource.OwnerUserId, user, ressource.SpaceId);
+    }
+
+    public async Task<bool> CheckSpaceMembership(Guid spaceId, Guid userId, CancellationToken ct = default)
     {
         var space = await db.Spaces
             .Cacheable()

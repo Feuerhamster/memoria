@@ -14,7 +14,11 @@ public interface IFileStorageService
 {
     Task<Result<FileMetadata>> StoreFile(Stream fileStream, string originalFileName, string contentType, RessourceOwnerHelper owner, RessourceAccessPolicy accessPolicy, CancellationToken cancellationToken = default);
 
+    Task<Result<FileMetadata>> UpdateFile(FileMetadata existingFile, Stream fileStream, CancellationToken cancellationToken = default);
+
     Task<Result<FileDownloadResult>> GetFile(Guid fileId, CancellationToken cancellationToken = default);
+    
+    Task<FileMetadata?> GetFileMetadata(Guid fileId, CancellationToken ct = default);
 
     Task<bool> DeleteFile(FileMetadata file, CancellationToken cancellationToken = default);
 }
@@ -116,33 +120,79 @@ public class FileStorageService : IFileStorageService
         }
     }
     
+    public async Task<Result<FileMetadata>> UpdateFile(
+        FileMetadata existingFile,
+        Stream fileStream,
+        CancellationToken cancellationToken = default)
+    {
+        var extension = Path.GetExtension(existingFile.FileName);
+        var fullPath = Path.Combine(_config.StoragePath, GenerateStoragePath(existingFile.Id, extension));
+
+        try
+        {
+            string fileHash;
+            long fileSize;
+
+            // Replace the physical file with new content
+            await using (var fileStreamWriter = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, BUFFER_SIZE, useAsync: true))
+            {
+                using var sha256 = SHA256.Create();
+                await using var cryptoStream = new CryptoStream(fileStreamWriter, sha256, CryptoStreamMode.Write);
+
+                await fileStream.CopyToAsync(cryptoStream, BUFFER_SIZE, cancellationToken);
+                await cryptoStream.FlushFinalBlockAsync(cancellationToken);
+
+                fileHash = Convert.ToHexString(sha256.Hash ?? []);
+                fileSize = fileStreamWriter.Length;
+            }
+
+            // Update metadata in database
+            existingFile.FileHash = fileHash;
+            existingFile.SizeInBytes = fileSize;
+            existingFile.UploadedAt = DateTime.UtcNow;
+
+            _dbContext.Files.Update(existingFile);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("File updated: {FileId}, Name: {FileName}, Size: {Size} kilobytes",
+                existingFile.Id, existingFile.FileName, existingFile.SizeInBytes / 1000);
+
+            return new Result<FileMetadata>(existingFile);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update file: {FileId}", existingFile.Id);
+            return new Result<FileMetadata>(ex);
+        }
+    }
+
     public async Task<Result<FileDownloadResult>> GetFile(Guid fileId, CancellationToken cancellationToken = default)
     {
         var storedFile = await _dbContext.Files
             .FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
-        
+
         if (storedFile == null)
         {
             _logger.LogWarning("Datei nicht gefunden: {FileId}", fileId);
             return new Result<FileDownloadResult>(new FileNotFoundException());
         }
-        
+
         var fullPath = Path.Combine(_config.StoragePath, GenerateStoragePath(storedFile.Id, Path.GetExtension(storedFile.FileName)));
-        
+
         if (!File.Exists(fullPath))
         {
             _logger.LogError("Physische Datei nicht gefunden: {Path}", fullPath);
             return new Result<FileDownloadResult>(new FileNotFoundException());
         }
-        
+
         var fileStream = new FileStream(
-            fullPath, 
-            FileMode.Open, 
-            FileAccess.Read, 
-            FileShare.Read, 
-            BUFFER_SIZE, 
+            fullPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            BUFFER_SIZE,
             useAsync: true);
-        
+
         return new Result<FileDownloadResult>(new FileDownloadResult
         {
             FileStream = fileStream,
@@ -151,7 +201,12 @@ public class FileStorageService : IFileStorageService
             FileSize = storedFile.SizeInBytes
         });
     }
-    
+
+    public Task<FileMetadata?> GetFileMetadata(Guid fileId, CancellationToken ct = default)
+    {
+        return _dbContext.Files.Where(f => f.Id.Equals(fileId)).FirstOrDefaultAsync(ct);
+    }
+
     public async Task<bool> DeleteFile(FileMetadata file, CancellationToken cancellationToken = default)
     {
         // Physische Datei löschen (asynchron im Hintergrund)

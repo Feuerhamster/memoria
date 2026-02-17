@@ -15,30 +15,36 @@ namespace Memoria.Services.WebDav;
 public static class WebDavHelpers
 {
 	/// <summary>
-	/// Creates the three policy folders (private, shared, public) as XML responses
+	/// Creates the four access policy folders as XML responses
 	/// </summary>
-	public static List<XElement> CreatePolicyFolderResponses(EEntityTypes basePath, string entityName, DateTime createdAt, bool includePrivate, IStringLocalizer<WebDavController> localizer)
+	public static List<XElement> CreatePolicyFolderResponses(string spaceName, DateTime createdAt, bool isMember, IStringLocalizer<WebDavController> localizer)
 	{
-		var responses = new List<XElement>();
-
-		if (includePrivate)
+		var responses = new List<XElement>
 		{
-			responses.Add(WebDavXmlBuilder.CreateCollection(
-				WebDavXmlBuilder.BuildHref(basePath.ToString().ToLower(), entityName, "private"),
-				localizer["Policy.Private"],
+			WebDavXmlBuilder.CreateCollection(
+				WebDavXmlBuilder.BuildHref(spaceName, "public"),
+				localizer["Policy.Public"],
 				createdAt
-			));
-		}
-
+			),
+			WebDavXmlBuilder.CreateCollection(
+				WebDavXmlBuilder.BuildHref(spaceName, "shared"),
+				localizer["Policy.Shared"],
+				createdAt
+			)
+		};
+		
+		if (!isMember) return responses;
+		
+		// Members and Private folders only visible to space members
 		responses.Add(WebDavXmlBuilder.CreateCollection(
-			WebDavXmlBuilder.BuildHref(basePath.ToString().ToLower(), entityName, "shared"),
-			localizer["Policy.Shared"],
+			WebDavXmlBuilder.BuildHref(spaceName, "members"),
+			localizer["Policy.Members"],
 			createdAt
 		));
 
 		responses.Add(WebDavXmlBuilder.CreateCollection(
-			WebDavXmlBuilder.BuildHref(basePath.ToString().ToLower(), entityName, "public"),
-			localizer["Policy.Public"],
+			WebDavXmlBuilder.BuildHref(spaceName, "private"),
+			localizer["Policy.Private"],
 			createdAt
 		));
 
@@ -49,25 +55,13 @@ public static class WebDavHelpers
 	/// Lists files in a policy folder.
 	/// Note: Does not perform access control checks - caller must filter results.
 	/// </summary>
-	public static async Task<List<FileMetadata>> ListFilesInPolicyFolder(
+	public static Task<List<FileMetadata>> ListFilesInPolicyFolder(
 		AppDbContext db,
-		Guid? spaceId,
-		Guid? ownerId,
+		Guid spaceId,
 		RessourceAccessPolicy policy,
 		CancellationToken ct)
 	{
-		var filesQuery = db.Files.Cacheable().AsNoTracking().Where(f => f.AccessPolicy == policy);
-
-		if (spaceId.HasValue)
-		{
-			filesQuery = filesQuery.Where(f => f.SpaceId == spaceId);
-		}
-		else if (ownerId.HasValue)
-		{
-			filesQuery = filesQuery.Where(f => f.OwnerUserId == ownerId && f.SpaceId == null);
-		}
-
-		return await filesQuery.ToListAsync(ct);
+		return db.Files.Cacheable().AsNoTracking().Where(f => f.AccessPolicy == policy && f.SpaceId == spaceId).ToListAsync(ct);
 	}
 
 	/// <summary>
@@ -75,17 +69,16 @@ public static class WebDavHelpers
 	/// </summary>
 	public static List<XElement> CreateFileResponses(
 		IEnumerable<FileMetadata> files,
-		string basePath,
-		string entityName,
-		EEntityPolicy policyFolder,
+		string spaceName,
+		RessourceAccessPolicy policy,
 		Func<Guid, List<LockInfo>>? getLocksForFile = null)
 	{
 		return (from file in files
-			let href = WebDavXmlBuilder.BuildHref(false, basePath, entityName, policyFolder.ToString().ToLower(), file.FileName)
+			let href = WebDavXmlBuilder.BuildHref(false, spaceName, policy.ToString().ToLower(), file.FileName)
 			let locks = getLocksForFile?.Invoke(file.Id)
 			select WebDavXmlBuilder.CreateFile(href, file, locks)).ToList();
 	}
-	
+
 	public static async Task<FileMetadata?> FindFile(
 		AppDbContext db,
 		Guid? spaceId,
@@ -104,15 +97,4 @@ public static class WebDavHelpers
 
 		return await query.FirstOrDefaultAsync(ct);
 	}
-
-	/// <summary>
-	/// Maps policy folder name to RessourceAccessPolicy enum
-	/// </summary>
-	public static RessourceAccessPolicy? MapPolicyFolder(EEntityPolicy policy, bool isSpaceContext) => policy switch
-	{
-		EEntityPolicy.Private => isSpaceContext ? RessourceAccessPolicy.Members : RessourceAccessPolicy.Private,
-		EEntityPolicy.Shared  => RessourceAccessPolicy.Shared,
-		EEntityPolicy.Public  => RessourceAccessPolicy.Public,
-		_ => null
-	};
 }

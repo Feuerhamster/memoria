@@ -98,7 +98,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
             entity.HasKey(e => e.Id);
             entity.HasOne<User>()
                 .WithMany()
-                .HasForeignKey(e => e.CreatorUserId)
+                .HasForeignKey(e => e.OwnerUserId)
                 .OnDelete(DeleteBehavior.SetNull)
                 .IsRequired();
 

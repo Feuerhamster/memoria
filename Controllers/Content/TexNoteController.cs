@@ -11,24 +11,19 @@ namespace Memoria.Controllers.Content;
 
 [ApiController]
 [Route("/posts")]
+[Authorize]
 public class TexNoteController(AppDbContext db, IAccessPolicyHelperService accessHelper) : ControllerBase
 {
     [HttpPost]
-    [Authorize]
     public async Task<ActionResult<Post>> CreateTextNotePost(CreateTextNotePostRequest body)
     {
+        var user = this.User.GetAuthClaimsData();
+        
         if (body.SpaceId != null)
         {
-            var isAllowed = await accessHelper.CheckAccessPolicy(RessourceAccessPolicy.Members, AccessIntent.Write,
-                (Guid)body.SpaceId, this.User, body.SpaceId);
-
-            if (!isAllowed)
-            {
-                return new AccessDeniedApiException();
-            }
+            var isAllowed = await accessHelper.CheckSpaceMembership(body.SpaceId.Value, user.UserId);
+            if (!isAllowed) return new AccessDeniedApiException();
         }
-
-        var user = this.User.GetAuthClaimsData();
 
         var newPost = new Post(user.UserId, body);
 
@@ -36,18 +31,10 @@ public class TexNoteController(AppDbContext db, IAccessPolicyHelperService acces
         
         var res = await db.SaveChangesAsync();
 
-        if (res > 1)
-        {
-            return Ok(newPost);
-        }
-        else
-        {
-            return new OperationFailedApiException();
-        }
+        return res > 1 ? Ok(newPost) : new OperationFailedApiException();
     }
 
     [HttpDelete("{postId:guid}")]
-    [Authorize]
     public async Task<ActionResult> DeletePost(Guid postId)
     {
         var post = await db.Posts.FindAsync(postId);
@@ -57,23 +44,13 @@ public class TexNoteController(AppDbContext db, IAccessPolicyHelperService acces
             return new NotFoundApiException();
         }
 
-        var isAllowed = await accessHelper.CheckAccessPolicy(post.Visibility, AccessIntent.Write, post.Id, this.User, post.SpaceId);
+        var isAllowed = await accessHelper.CheckAccessPolicy(post, AccessIntent.Write, this.User);
 
-        if (!isAllowed)
-        {
-            return new AccessDeniedApiException();
-        }
+        if (!isAllowed) return new AccessDeniedApiException();
         
         db.Posts.Remove(post);
         var removed = await db.SaveChangesAsync();
 
-        if (removed > 0)
-        {
-            return Ok();
-        }
-        else
-        {
-            return new OperationFailedApiException();
-        }
+        return removed > 0 ? Ok() : new OperationFailedApiException();
     }
 }

@@ -2,7 +2,7 @@ namespace Memoria.Models.Database;
 
 
 
-public class FileMetadata
+public class FileMetadata : IAccessManagedRessource
 {
     public Guid Id { get; set; }
     
