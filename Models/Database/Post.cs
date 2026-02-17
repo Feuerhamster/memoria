@@ -9,7 +9,7 @@ public class Post : IAccessManagedRessource
         
     }
 
-    public Post(Guid ownerUserId, CreateTextNotePostRequest create)
+    public Post(Guid ownerUserId, CreatePostRequest create)
     {
         this.OwnerUserId = ownerUserId;
         this.SpaceId = create.SpaceId;
@@ -21,14 +21,6 @@ public class Post : IAccessManagedRessource
         
         this.ParentId = create.ParentId;
         this.RootParentId = create.RootParentId;
-
-        this.TextNote = new TextNote()
-        {
-            Title = create.Title,
-            Text = create.Text,
-            IsInSpaceDocs = create.InSpaceDocs,
-            PostId = this.Id
-        };
     }
     
     public Guid Id { get; set; }
@@ -37,24 +29,17 @@ public class Post : IAccessManagedRessource
     public DateTime CreatedAt { get; set; }
     public DateTime? ModifiedAt { get; set; }
     
+    public string Text { get; set; }
+    
     public Guid? ParentId { get; set; }
     public Guid? RootParentId { get; set; }
     
-    public TextNote? TextNote { get; set; }
-    public List<FileMetadata>? Files { get; set; }
+    public FileMetadata? File { get; set; }
+    // public Ticket? Ticket { get; set; }
     
     public RessourceAccessPolicy AccessPolicy {  get; set; }
     
     public bool IsArchived { get; set; }
-}
-
-public class TextNote
-{
-    public Guid Id { get; set; }
-    public string? Title { get; set; } = string.Empty;
-    public string Text { get; set; } = string.Empty;
     
-    public Guid PostId { get; set; }
-    
-    public bool IsInSpaceDocs { get; set; }
+    public bool IsSpaceDocument { get; set; }
 }

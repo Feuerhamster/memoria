@@ -1,4 +1,3 @@
-using EFCoreSecondLevelCacheInterceptor;
 using Memoria.Models.Config;
 using Memoria.Models.Database;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -19,7 +18,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
     public DbSet<FileMetadata> Files { get; set; }
     
     public DbSet<Post> Posts { get; set; }
-    public DbSet<TextNote> TextNotes { get; set; }
     
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
@@ -58,7 +56,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
                 .OnDelete(DeleteBehavior.SetNull);
         });
         
-        this.CreateContentModels(modelBuilder);
+        this.CreatePostModel(modelBuilder);
+        //this.CreateTicketModel(modelBuilder);
     }
 
     private void CreateUserManagementModels(ModelBuilder modelBuilder)
@@ -91,7 +90,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
         });
     }
 
-    private void CreateContentModels(ModelBuilder modelBuilder)
+    private void CreatePostModel(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Post>(entity =>
         {
@@ -113,18 +112,36 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity
-                .HasMany<FileMetadata>(e => e.Files)
+                .HasOne<FileMetadata>(e => e.File)
                 .WithMany();
         });
+    }
 
-        modelBuilder.Entity<TextNote>(entity =>
+    /*private void CreateTicketModel(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Ticket>(entity =>
         {
             entity.HasKey(e => e.Id);
             
-            entity.HasOne<Post>()
-                .WithOne(t => t.TextNote)
-                .HasForeignKey<TextNote>(t => t.PostId)
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(e => e.OwnerUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+            
+            entity.HasOne<Space>()
+                .WithMany()
+                .HasForeignKey(f => f.SpaceId)
+                .OnDelete(DeleteBehavior.SetNull);
+            
+            entity.HasOne<Post>(t => t.Post)
+                .WithOne(p => p.Ticket)
+                .HasForeignKey<Post>()
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(t => t.SubTasks)
+                .WithOne()
+                .HasForeignKey(t => t.Id)
                 .OnDelete(DeleteBehavior.Cascade);
         });
-    }
+    }*/
 }

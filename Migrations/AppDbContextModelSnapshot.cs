@@ -17,21 +17,6 @@ namespace Memoria.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
 
-            modelBuilder.Entity("FileMetadataPost", b =>
-                {
-                    b.Property<Guid>("FilesId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("PostId")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("FilesId", "PostId");
-
-                    b.HasIndex("PostId");
-
-                    b.ToTable("FileMetadataPost");
-                });
-
             modelBuilder.Entity("Memoria.Models.Database.FileMetadata", b =>
                 {
                     b.Property<Guid>("Id")
@@ -86,7 +71,13 @@ namespace Memoria.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("FileId")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("IsArchived")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsSpaceDocument")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("ModifiedAt")
@@ -104,7 +95,13 @@ namespace Memoria.Migrations
                     b.Property<Guid?>("SpaceId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("FileId");
 
                     b.HasIndex("OwnerUserId");
 
@@ -152,33 +149,6 @@ namespace Memoria.Migrations
                     b.HasIndex("ImageId");
 
                     b.ToTable("Spaces");
-                });
-
-            modelBuilder.Entity("Memoria.Models.Database.TextNote", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsInSpaceDocs")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("PostId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Text")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Title")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PostId")
-                        .IsUnique();
-
-                    b.ToTable("TextNotes");
                 });
 
             modelBuilder.Entity("Memoria.Models.Database.User", b =>
@@ -309,21 +279,6 @@ namespace Memoria.Migrations
                     b.ToTable("SpaceUser");
                 });
 
-            modelBuilder.Entity("FileMetadataPost", b =>
-                {
-                    b.HasOne("Memoria.Models.Database.FileMetadata", null)
-                        .WithMany()
-                        .HasForeignKey("FilesId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Memoria.Models.Database.Post", null)
-                        .WithMany()
-                        .HasForeignKey("PostId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Memoria.Models.Database.FileMetadata", b =>
                 {
                     b.HasOne("Memoria.Models.Database.User", null)
@@ -340,6 +295,10 @@ namespace Memoria.Migrations
 
             modelBuilder.Entity("Memoria.Models.Database.Post", b =>
                 {
+                    b.HasOne("Memoria.Models.Database.FileMetadata", "File")
+                        .WithMany()
+                        .HasForeignKey("FileId");
+
                     b.HasOne("Memoria.Models.Database.User", null)
                         .WithMany()
                         .HasForeignKey("OwnerUserId")
@@ -355,6 +314,8 @@ namespace Memoria.Migrations
                         .WithMany()
                         .HasForeignKey("RootParentId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("File");
                 });
 
             modelBuilder.Entity("Memoria.Models.Database.Space", b =>
@@ -363,15 +324,6 @@ namespace Memoria.Migrations
                         .WithMany()
                         .HasForeignKey("ImageId")
                         .OnDelete(DeleteBehavior.Cascade);
-                });
-
-            modelBuilder.Entity("Memoria.Models.Database.TextNote", b =>
-                {
-                    b.HasOne("Memoria.Models.Database.Post", null)
-                        .WithOne("TextNote")
-                        .HasForeignKey("Memoria.Models.Database.TextNote", "PostId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Memoria.Models.Database.UserAppAccessToken", b =>
@@ -405,11 +357,6 @@ namespace Memoria.Migrations
                         .HasForeignKey("SpaceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Memoria.Models.Database.Post", b =>
-                {
-                    b.Navigation("TextNote");
                 });
 #pragma warning restore 612, 618
         }

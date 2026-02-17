@@ -6,16 +6,17 @@ using Memoria.Models.Request;
 using Memoria.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Memoria.Controllers.Content;
 
 [ApiController]
 [Route("/posts")]
 [Authorize]
-public class TexNoteController(AppDbContext db, IAccessPolicyHelperService accessHelper) : ControllerBase
+public class PostController(AppDbContext db, IAccessPolicyHelperService accessHelper) : ControllerBase
 {
     [HttpPost]
-    public async Task<ActionResult<Post>> CreateTextNotePost(CreateTextNotePostRequest body)
+    public async Task<ActionResult<Post>> CreatePost(CreatePostRequest body)
     {
         var user = this.User.GetAuthClaimsData();
         
@@ -34,6 +35,22 @@ public class TexNoteController(AppDbContext db, IAccessPolicyHelperService acces
         return res > 1 ? Ok(newPost) : new OperationFailedApiException();
     }
 
+    [HttpPatch("{postId:guid}")]
+    public async Task<ActionResult<Post>> UpdatePost(Guid postId, UpdatePostRequest updater, CancellationToken ct)
+    {
+        var user = this.User.GetAuthClaimsData();
+        
+        var post = await db.Posts.FirstOrDefaultAsync(p => p.Id == postId && p.OwnerUserId == user.UserId, ct);
+        
+        if (post == null) return new NotFoundApiException();
+        
+        updater.Apply(post);
+        
+        var updated =  await db.SaveChangesAsync(ct);
+        
+        return updated > 0 ? post : new OperationFailedApiException();
+    }
+    
     [HttpDelete("{postId:guid}")]
     public async Task<ActionResult> DeletePost(Guid postId)
     {

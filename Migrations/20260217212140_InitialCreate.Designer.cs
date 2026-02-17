@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Memoria.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260215205528_Fixes")]
-    partial class Fixes
+    [Migration("20260217212140_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -80,19 +80,21 @@ namespace Memoria.Migrations
             modelBuilder.Entity("Memoria.Models.Database.Post", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("AccessPolicy")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("CreatorUserId")
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsArchived")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("OwnerUserId")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("ParentId")
@@ -104,12 +106,9 @@ namespace Memoria.Migrations
                     b.Property<Guid?>("SpaceId")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("Visibility")
-                        .HasColumnType("INTEGER");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("CreatorUserId");
+                    b.HasIndex("OwnerUserId");
 
                     b.HasIndex("ParentId");
 
@@ -123,6 +122,12 @@ namespace Memoria.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("AccessPolicy")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("AllowJoins")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Color")
                         .HasColumnType("TEXT");
@@ -178,6 +183,70 @@ namespace Memoria.Migrations
                     b.ToTable("TextNotes");
                 });
 
+            modelBuilder.Entity("Memoria.Models.Database.Ticket", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("AccessPolicy")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("SpaceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("SpaceId");
+
+                    b.ToTable("Ticket");
+                });
+
+            modelBuilder.Entity("Memoria.Models.Database.TicketSubTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("TicketSubTask");
+                });
+
             modelBuilder.Entity("Memoria.Models.Database.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -205,6 +274,9 @@ namespace Memoria.Migrations
                     b.Property<DateTime>("RegisterDate")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("TicketId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -217,16 +289,22 @@ namespace Memoria.Migrations
                     b.HasIndex("OidcSub")
                         .IsUnique();
 
+                    b.HasIndex("TicketId");
+
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("Memoria.Models.Database.UserAppAccessTokens", b =>
+            modelBuilder.Entity("Memoria.Models.Database.UserAppAccessToken", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("AccessToken")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
@@ -333,9 +411,15 @@ namespace Memoria.Migrations
 
             modelBuilder.Entity("Memoria.Models.Database.Post", b =>
                 {
+                    b.HasOne("Memoria.Models.Database.Ticket", "Ticket")
+                        .WithOne("Post")
+                        .HasForeignKey("Memoria.Models.Database.Post", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("Memoria.Models.Database.User", null)
                         .WithMany()
-                        .HasForeignKey("CreatorUserId")
+                        .HasForeignKey("OwnerUserId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .IsRequired();
 
@@ -348,6 +432,8 @@ namespace Memoria.Migrations
                         .WithMany()
                         .HasForeignKey("RootParentId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Ticket");
                 });
 
             modelBuilder.Entity("Memoria.Models.Database.Space", b =>
@@ -367,7 +453,37 @@ namespace Memoria.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Memoria.Models.Database.UserAppAccessTokens", b =>
+            modelBuilder.Entity("Memoria.Models.Database.Ticket", b =>
+                {
+                    b.HasOne("Memoria.Models.Database.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .IsRequired();
+
+                    b.HasOne("Memoria.Models.Database.Space", null)
+                        .WithMany()
+                        .HasForeignKey("SpaceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Memoria.Models.Database.TicketSubTask", b =>
+                {
+                    b.HasOne("Memoria.Models.Database.Ticket", null)
+                        .WithMany("SubTasks")
+                        .HasForeignKey("Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Memoria.Models.Database.User", b =>
+                {
+                    b.HasOne("Memoria.Models.Database.Ticket", null)
+                        .WithMany("Assignees")
+                        .HasForeignKey("TicketId");
+                });
+
+            modelBuilder.Entity("Memoria.Models.Database.UserAppAccessToken", b =>
                 {
                     b.HasOne("Memoria.Models.Database.User", null)
                         .WithMany()
@@ -403,6 +519,15 @@ namespace Memoria.Migrations
             modelBuilder.Entity("Memoria.Models.Database.Post", b =>
                 {
                     b.Navigation("TextNote");
+                });
+
+            modelBuilder.Entity("Memoria.Models.Database.Ticket", b =>
+                {
+                    b.Navigation("Assignees");
+
+                    b.Navigation("Post");
+
+                    b.Navigation("SubTasks");
                 });
 #pragma warning restore 612, 618
         }

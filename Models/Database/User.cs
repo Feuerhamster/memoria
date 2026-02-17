@@ -2,6 +2,15 @@ using System.Text.Json.Serialization;
 
 namespace Memoria.Models.Database;
 
+public class PublicEmbeddedUser(User user)
+{
+	public Guid Id { get; } = user.Id;
+	
+	public string Username { get; } = user.Username;
+	public string Nickname { get;  } =  user.Nickname;
+	public string? Image { get; } =  user.Image;
+}
+
 public class User {
 	public User()
 	{
