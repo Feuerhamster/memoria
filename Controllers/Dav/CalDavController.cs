@@ -223,7 +223,9 @@ public class CalDavController(
             .Select(h =>
             {
                 var last = h.Value.Trim().TrimEnd('/').Split('/').LastOrDefault();
-                return last?.EndsWith(".ics") == true && Guid.TryParse(last[..^4], out var id) ? id : (Guid?)null;
+                return last?.EndsWith(".ics") == true
+                    ? CalDavHelpers.ParseOrDeriveEventId(last[..^4])
+                    : (Guid?)null;
             })
             .Where(id => id.HasValue)
             .Select(id => id!.Value)
@@ -249,12 +251,13 @@ public class CalDavController(
     // GET /caldav/{spaceName}/{eventId}.ics
     // -------------------------------------------------------------------------
 
-    [HttpGet("{spaceId:guid}/{eventId}.ics")]
-    public async Task<IActionResult> GetEvent(Guid spaceId, Guid eventId, CancellationToken ct)
+    [HttpGet("{spaceId:guid}/{eventSegment}.ics")]
+    public async Task<IActionResult> GetEvent(Guid spaceId, string eventSegment, CancellationToken ct)
     {
         var space = await GetSpace(spaceId, ct);
         if (space == null) return NotFound();
 
+        var eventId = CalDavHelpers.ParseOrDeriveEventId(eventSegment);
         var entry = await calendarService.GetCalendarEntry(eventId, spaceId, ct);
         if (entry == null) return NotFound();
 
@@ -284,8 +287,8 @@ public class CalDavController(
     // PUT /caldav/{spaceName}/{eventId}.ics — create or update
     // -------------------------------------------------------------------------
 
-    [HttpPut("{spaceId:guid}/{eventId}.ics")]
-    public async Task<IActionResult> PutEvent(Guid spaceId, Guid eventId, CancellationToken ct)
+    [HttpPut("{spaceId:guid}/{eventSegment}.ics")]
+    public async Task<IActionResult> PutEvent(Guid spaceId, string eventSegment, CancellationToken ct)
     {
         var space = await GetSpace(spaceId, ct);
         if (space == null) return NotFound();
@@ -308,7 +311,16 @@ public class CalDavController(
         if (icalEvent == null) return BadRequest();
 
         var userId = User.GetUserId();
+        
+        var eventId = CalDavHelpers.ParseOrDeriveEventId(eventSegment);
+
         var existing = await calendarService.GetCalendarEntry(eventId, spaceId, ct);
+        
+        if (existing == null && !Guid.TryParse(eventSegment, out _) && Guid.TryParse(icalEvent.Uid, out var uidGuid))
+        {
+            var byUid = await calendarService.GetCalendarEntry(uidGuid, spaceId, ct);
+            if (byUid != null) { existing = byUid; eventId = uidGuid; }
+        }
 
         if (existing != null)
         {
@@ -363,12 +375,13 @@ public class CalDavController(
     // DELETE /caldav/{spaceName}/{eventId}.ics
     // -------------------------------------------------------------------------
 
-    [HttpDelete("{spaceId:guid}/{eventId}.ics")]
-    public async Task<IActionResult> DeleteEvent(Guid spaceId, Guid eventId, CancellationToken ct)
+    [HttpDelete("{spaceId:guid}/{eventSegment}.ics")]
+    public async Task<IActionResult> DeleteEvent(Guid spaceId, string eventSegment, CancellationToken ct)
     {
         var space = await GetSpace(spaceId, ct);
         if (space == null) return NotFound();
 
+        var eventId = CalDavHelpers.ParseOrDeriveEventId(eventSegment);
         var evt = await calendarService.GetCalendarEntry(eventId, spaceId, ct);
         if (evt == null) return NotFound();
 
@@ -376,7 +389,7 @@ public class CalDavController(
             return Forbid();
 
         db.CalendarEvents.Remove(evt);
-        await db.SaveChangesAsync(ct);
+        var deleted = await db.SaveChangesAsync(ct);
         return NoContent();
     }
 

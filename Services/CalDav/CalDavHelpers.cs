@@ -21,6 +21,20 @@ public static class CalDavHelpers
         return Convert.ToHexString(hash);
     }
 
+    /// <summary>
+    /// Converts a CalDAV event URL segment (the part before <c>.ics</c>) to a stable GUID.
+    /// If the segment is already a valid GUID it is returned as-is.
+    /// Otherwise a deterministic GUID is derived via SHA-256 so that the same client UID
+    /// always maps to the same database record, regardless of whether the client uses
+    /// its own UID format (e.g. <c>20260219T120000Z-1234@laptop</c>) or a proper UUID.
+    /// </summary>
+    public static Guid ParseOrDeriveEventId(string segment)
+    {
+        if (Guid.TryParse(segment, out var guid)) return guid;
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(segment));
+        return new Guid(hash[..16]);
+    }
+
     /// <summary>Builds the CalDAV href for an individual event.</summary>
     public static string BuildEventHref(Guid spaceId, Guid eventId)
         => $"/dav/caldav/{spaceId}/{eventId}.ics";

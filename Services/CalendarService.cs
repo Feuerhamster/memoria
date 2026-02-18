@@ -28,10 +28,22 @@ public class CalendarService(AppDbContext db, ISpaceService spaceService) : ICal
     {
         return db.CalendarEvents
             .Where(e =>
-                    e.RecurrenceFrequency != null && e.StartDate <= end  // recurring: gestartet vor Ende des Suchfensters
-                                    && (e.RecurrenceUntil == null || e.RecurrenceUntil >= start) // und nicht schon abgelaufen
-                    || (e.RecurrenceFrequency == null && e.StartDate >= start && e.EndDate <= end) // single events
-                    && (e.AccessPolicy < RessourceAccessPolicy.Private || e.OwnerUserId == userId) // access control
+                e.SpaceId == spaceId
+                && (e.AccessPolicy < RessourceAccessPolicy.Private || e.OwnerUserId == userId)
+                && (
+                    // No time filter at all — return everything (calendar-query without time-range)
+                    (start == null && end == null)
+                    ||
+                    // Recurring: include if the rule could produce occurrences inside the window
+                    (e.RecurrenceFrequency != null
+                        && (end == null || e.StartDate <= end)
+                        && (start == null || e.RecurrenceUntil == null || e.RecurrenceUntil >= start))
+                    ||
+                    // Single events: standard overlap check (event starts before range ends, ends after range starts)
+                    (e.RecurrenceFrequency == null
+                        && (end == null || e.StartDate < end)
+                        && (start == null || e.EndDate > start))
+                )
             )
             .ToListAsync(ct);
     }
