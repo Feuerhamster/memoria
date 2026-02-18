@@ -17,7 +17,7 @@ namespace Memoria.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
 
-            modelBuilder.Entity("Memoria.Models.Database.CalendarEvent", b =>
+            modelBuilder.Entity("Memoria.Models.Database.CalendarEntry", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -26,22 +26,13 @@ namespace Memoria.Migrations
                     b.Property<int>("AccessPolicy")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("AlarmsJson")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Classification")
-                        .HasColumnType("INTEGER");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Description")
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime?>("EndDate")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ExceptionDates")
+                    b.Property<DateTime>("EndDate")
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsAllDay")
@@ -56,7 +47,16 @@ namespace Memoria.Migrations
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("RecurrenceRuleJson")
+                    b.Property<int?>("RecurrenceCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("RecurrenceFrequency")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("RecurrenceInterval")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("RecurrenceUntil")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Sequence")
@@ -68,13 +68,7 @@ namespace Memoria.Migrations
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("Summary")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TimeZoneId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -357,7 +351,7 @@ namespace Memoria.Migrations
                     b.ToTable("SpaceUser");
                 });
 
-            modelBuilder.Entity("Memoria.Models.Database.CalendarEvent", b =>
+            modelBuilder.Entity("Memoria.Models.Database.CalendarEntry", b =>
                 {
                     b.HasOne("Memoria.Models.Database.User", null)
                         .WithMany()
@@ -388,7 +382,7 @@ namespace Memoria.Migrations
 
             modelBuilder.Entity("Memoria.Models.Database.Post", b =>
                 {
-                    b.HasOne("Memoria.Models.Database.CalendarEvent", "CalendarEvent")
+                    b.HasOne("Memoria.Models.Database.CalendarEntry", "CalendarEntry")
                         .WithMany()
                         .HasForeignKey("CalendarEventId")
                         .OnDelete(DeleteBehavior.SetNull);
@@ -413,7 +407,7 @@ namespace Memoria.Migrations
                         .HasForeignKey("RootParentId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.Navigation("CalendarEvent");
+                    b.Navigation("CalendarEntry");
 
                     b.Navigation("File");
                 });
