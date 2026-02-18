@@ -19,9 +19,9 @@ public static class WebDavXmlBuilder
 	/// <param name="segments">Path segments to join</param>
 	public static string BuildHref(bool isCollection, params string[] segments)
 	{
-		if (segments.Length == 0) return "/webdav/";
+		if (segments.Length == 0) return "/dav/webdav/";
 		var joined = string.Join("/", segments.Select(Uri.EscapeDataString));
-		return isCollection ? $"/webdav/{joined}/" : $"/webdav/{joined}";
+		return isCollection ? $"/dav/webdav/{joined}/" : $"/dav/webdav/{joined}";
 	}
 
 	/// <summary>

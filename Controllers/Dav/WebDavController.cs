@@ -46,7 +46,7 @@ public class WebDavController(
 	{
 		var depth = GetDepth();
 
-		var responses = new List<XElement> { WebDavXmlBuilder.CreateCollection("/webdav/", "WebDAV") };
+		var responses = new List<XElement> { WebDavXmlBuilder.CreateCollection("/dav/webdav/", "WebDAV") };
 		if (depth < 1) return MultiStatus(responses);
 		
 		var userId = this.User.GetUserId();
@@ -192,42 +192,42 @@ public class WebDavController(
 	[Route("{spaceName}/{policy}/{fileName}")]
 	public async Task<IActionResult> LockFile(string spaceName, RessourceAccessPolicy policy, string fileName, CancellationToken ct)
 	{
-		var resolved = await ResolveFile(spaceName, policy, fileName, ct);
-		if (resolved?.File == null) return NotFound();
+		var space = await ResolveSpace(spaceName, ct);
+		if (space == null) return NotFound();
 
 		var userId = User.GetUserId();
+		var resolved = await ResolveFile(spaceName, policy, fileName, ct);
 
-		// Check write access
-		if (!await accessControl.CheckAccessPolicy(resolved.File, AccessIntent.Write, User))
-			return Forbid();
+		Guid resourceId;
+		if (resolved?.File != null)
+		{
+			// Existing file — check write access
+			if (!await accessControl.CheckAccessPolicy(resolved.File, AccessIntent.Write, User))
+				return Forbid();
+			resourceId = resolved.File.Id;
+		}
+		else
+		{
+			// Null resource lock (RFC 4918 §7.4): client is locking before creating the file
+			if (!await accessControl.CheckSpaceMembership(space.Id, userId, ct))
+				return Forbid();
+			resourceId = NullResourceId(space.Id, policy, fileName);
+		}
 
 		try
 		{
-			// Parse LOCK request body
 			var lockRequest = await ParseLockRequest();
 			if (lockRequest == null)
 				return BadRequest(new { Error = "Invalid LOCK request" });
 
 			var (scope, type, depth, ownerInfo, timeoutSeconds) = lockRequest.Value;
 
-			// Create lock
-			var lockInfo = lockService.CreateLock(
-				resolved.File.Id,
-				userId,
-				ownerInfo,
-				scope,
-				type,
-				depth,
-				timeoutSeconds
-			);
+			var lockInfo = lockService.CreateLock(resourceId, userId, ownerInfo, scope, type, depth, timeoutSeconds);
 
-			// Build response
 			var response = WebDavXmlBuilder.BuildLockResponse(lockInfo, Request.Path.Value!);
-
 			Response.Headers["Lock-Token"] = $"<{lockInfo.LockToken}>";
 			Response.StatusCode = 200;
 			Response.ContentType = "application/xml; charset=utf-8";
-
 			return Content(response, "application/xml; charset=utf-8");
 		}
 		catch (InvalidOperationException ex)
@@ -278,19 +278,14 @@ public class WebDavController(
 
 	/// <summary>
 	/// MKCOL is not supported because this WebDAV server uses a fixed virtual folder structure.
-	/// All collections (spaces, policy folders) are pre-defined and managed by the application.
+	/// RFC 4918 §9.3: servers that do not support collection creation MUST return 405.
 	/// </summary>
 	[AcceptVerbs("MKCOL")]
 	[Route("{*path}")]
 	public IActionResult MkCol(string? path = null)
 	{
-		// RFC 4918 Section 9.3: MKCOL creates a collection
-		// Since we have a fixed virtual structure, creating arbitrary collections is not allowed
-		return StatusCode(StatusCodes.Status403Forbidden, new
-		{
-			Error = "Method Not Allowed",
-			Detail = "This WebDAV server uses a fixed folder structure. Collections cannot be created by clients."
-		});
+		Response.Headers.Allow = "OPTIONS, PROPFIND, GET, PUT, DELETE, MOVE, COPY, LOCK, UNLOCK";
+		return StatusCode(StatusCodes.Status405MethodNotAllowed);
 	}
 
 	[AcceptVerbs("MOVE")]
@@ -644,6 +639,17 @@ public class WebDavController(
 		var fileName = Uri.UnescapeDataString(segments[2]);
 
 		return (spaceName, policy, fileName);
+	}
+
+	/// <summary>
+	/// Generates a deterministic GUID for a not-yet-existing (null) resource so it can be locked
+	/// before creation (RFC 4918 §7.4 null resource locks).
+	/// </summary>
+	private static Guid NullResourceId(Guid spaceId, RessourceAccessPolicy policy, string fileName)
+	{
+		var input = System.Text.Encoding.UTF8.GetBytes($"{spaceId}:{(int)policy}:{fileName}");
+		var hash = System.Security.Cryptography.MD5.HashData(input);
+		return new Guid(hash);
 	}
 
 	/// <summary>

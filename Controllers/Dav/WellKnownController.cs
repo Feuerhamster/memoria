@@ -11,11 +11,11 @@ namespace Memoria.Controllers.Dav;
 /// both WebDAV files and CalDAV calendars from just the server base URL.
 /// </summary>
 [ApiController]
-[Route("dav")]
+[Route("")]
 public class WellKnownController : ControllerBase
 {
     // -------------------------------------------------------------------------
-    // Well-known redirects (RFC 6764)
+    // Well-known redirects (RFC 6764) — MUST be at /.well-known/, not /dav/.well-known/
     // -------------------------------------------------------------------------
 
     [AllowAnonymous]
@@ -35,7 +35,7 @@ public class WellKnownController : ControllerBase
 
     [AcceptVerbs("OPTIONS")]
     [AllowAnonymous]
-    [Route("")]
+    [Route("dav")]
     public IActionResult RootOptions()
     {
         Response.Headers["DAV"] = "1, 2, calendar-access";
@@ -43,12 +43,12 @@ public class WellKnownController : ControllerBase
         return Ok();
     }
 
-    // PROPFIND on / redirects to /webdav/ so that file managers (GNOME Files etc.)
+    // PROPFIND on /dav redirects to /dav/webdav/ so that file managers (GNOME Files etc.)
     // mount the WebDAV file store directly without extra sub-folders.
-    // CalDAV discovery happens independently via /.well-known/caldav → /caldav/.
+    // CalDAV discovery happens independently via /.well-known/caldav → /dav/caldav/.
     [AcceptVerbs("PROPFIND")]
-    [Authorize(AuthenticationSchemes = BasicAuthHandler.SchemeName, Policy = "CalDav")]
+    [Authorize(AuthenticationSchemes = BasicAuthHandler.SchemeName, Policy = "WebDavFiles")]
     [EnsureWwwAuthenticate]
-    [Route("")]
+    [Route("dav")]
     public IActionResult RootPropFind() => RedirectPermanent("/dav/webdav/");
 }

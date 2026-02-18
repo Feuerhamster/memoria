@@ -23,11 +23,11 @@ public static class CalDavHelpers
 
     /// <summary>Builds the CalDAV href for an individual event.</summary>
     public static string BuildEventHref(Guid spaceId, Guid eventId)
-        => $"/caldav/{spaceId}/{eventId}.ics";
+        => $"/dav/caldav/{spaceId}/{eventId}.ics";
 
     /// <summary>Builds the CalDAV href for a calendar collection (trailing slash).</summary>
     public static string BuildCalendarHref(Guid spaceId)
-        => $"/caldav/{spaceId}/";
+        => $"/dav/caldav/{spaceId}/";
 
     public static CalendarEvent CalendarEntryToICal(CalendarEntry entry)
     {

@@ -70,6 +70,7 @@ builder.Services.AddScoped<ICalendarService, CalendarService>();
 
 builder.Services.AddHttpClient();
 
+builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IKeyService, KeyService>();
 builder.Services.AddSingleton<IWebDavLockService, WebDavLockService>();
 

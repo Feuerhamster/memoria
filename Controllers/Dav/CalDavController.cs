@@ -67,13 +67,15 @@ public class CalDavController(
         };
 
         if (depth < 1) return MultiStatus(responses);
-        
+
         var spaces = await spaceService.GetMemberSpaces(userId);
-        
+        var ctags = await calendarService.GetCalendarCtags(spaces.Select(s => s.Id), ct);
+
         foreach (var space in spaces)
         {
             var href = CalDavHelpers.BuildCalendarHref(space.Id);
-            responses.Add(CalDavXmlBuilder.CreateCalendarCollection(href, space));
+            ctags.TryGetValue(space.Id, out var ctag);
+            responses.Add(CalDavXmlBuilder.CreateCalendarCollection(href, space, ctag));
         }
 
         return MultiStatus(responses);
@@ -150,9 +152,10 @@ public class CalDavController(
 
         var depth = GetDepth();
         var calendarHref = CalDavHelpers.BuildCalendarHref(space.Id);
+        var ctag = await calendarService.GetCalendarCtag(space.Id, ct);
         var responses = new List<XElement>
         {
-            CalDavXmlBuilder.CreateCalendarCollection(calendarHref, space)
+            CalDavXmlBuilder.CreateCalendarCollection(calendarHref, space, ctag)
         };
 
         if (depth < 1) return MultiStatus(responses);
@@ -170,7 +173,7 @@ public class CalDavController(
 
     [AcceptVerbs("REPORT")]
     [Route("{spaceId:guid}")]
-    public async Task<IActionResult> CalendarQuery(Guid spaceId, CancellationToken ct)
+    public async Task<IActionResult> CalendarReport(Guid spaceId, CancellationToken ct)
     {
         var space = await GetSpace(spaceId, ct);
         if (space == null) return NotFound();
@@ -179,30 +182,64 @@ public class CalDavController(
         if (!await accessControl.CheckSpaceMembership(space.Id, userId, ct))
             return Forbid();
 
-        // Parse REPORT body
-        CalendarQueryFilter? filter = null;
+        XDocument doc;
         try
         {
             Request.EnableBuffering();
-            var doc = await XDocument.LoadAsync(Request.Body, LoadOptions.None, ct);
-            filter = CalDavXmlBuilder.ParseCalendarQuery(doc);
+            doc = await XDocument.LoadAsync(Request.Body, LoadOptions.None, ct);
         }
         catch
         {
-            return new StatusCodeResult(StatusCodes.Status500InternalServerError);
+            return new StatusCodeResult(StatusCodes.Status400BadRequest);
         }
 
+        var reportType = doc.Root?.Name.LocalName;
+
+        if (reportType == "calendar-multiget")
+            return await HandleCalendarMultiget(space, userId, doc, ct);
+
+        // Default: calendar-query
+        var filter = CalDavXmlBuilder.ParseCalendarQuery(doc);
+        if (filter == null) return new StatusCodeResult(StatusCodes.Status400BadRequest);
+
         var events = await calendarService.FindPotentialCalendarEntriesInRange(space.Id, userId, filter.Start, filter.End, ct);
-        
+
         var responses = events.Select(e =>
         {
-            var calendar = new Calendar()
-            {
-                Events = { CalDavHelpers.CalendarEntryToICal(e) }
-            };
+            var cal = new Calendar { Events = { CalDavHelpers.CalendarEntryToICal(e) } };
+            var ics = new CalendarSerializer().SerializeToString(cal);
+            return CalDavXmlBuilder.CreateEventResponse(space.Id, new CaldavEventMetadata(e), ics);
+        }).ToList();
 
-            var ics =  new CalendarSerializer().SerializeToString(calendar);
-            return CalDavXmlBuilder.CreateEventResponse(space.Id, new CaldavEventMetadata(e),  ics);
+        return MultiStatus(responses);
+    }
+
+    private async Task<IActionResult> HandleCalendarMultiget(Space space, Guid userId, XDocument doc, CancellationToken ct)
+    {
+        var dav = XNamespace.Get("DAV:");
+
+        var eventIds = doc.Root!
+            .Descendants(dav + "href")
+            .Select(h =>
+            {
+                var last = h.Value.Trim().TrimEnd('/').Split('/').LastOrDefault();
+                return last?.EndsWith(".ics") == true && Guid.TryParse(last[..^4], out var id) ? id : (Guid?)null;
+            })
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToList();
+
+        var events = await db.CalendarEvents
+            .Where(e => e.SpaceId == space.Id
+                        && eventIds.Contains(e.Id)
+                        && (e.AccessPolicy < RessourceAccessPolicy.Private || e.OwnerUserId == userId))
+            .ToListAsync(ct);
+
+        var responses = events.Select(e =>
+        {
+            var cal = new Calendar { Events = { CalDavHelpers.CalendarEntryToICal(e) } };
+            var ics = new CalendarSerializer().SerializeToString(cal);
+            return CalDavXmlBuilder.CreateEventResponse(space.Id, new CaldavEventMetadata(e), ics);
         }).ToList();
 
         return MultiStatus(responses);
@@ -257,7 +294,7 @@ public class CalDavController(
         using (var reader = new StreamReader(Request.Body))
             body = await reader.ReadToEndAsync(ct);
 
-        Calendar calendar;
+        Calendar? calendar;
         try
         {
             calendar = Calendar.Load(body);
@@ -267,7 +304,7 @@ public class CalDavController(
             return BadRequest();
         }
 
-        var icalEvent = calendar.Events.FirstOrDefault();
+        var icalEvent = calendar?.Events.FirstOrDefault();
         if (icalEvent == null) return BadRequest();
 
         var userId = User.GetUserId();
@@ -377,8 +414,8 @@ public class CalDavController(
             Summary = ev.Summary,
             Description = ev.Description,
             Location = ev.Location,
-            StartDate = DateTime.SpecifyKind(ev.DtStart.Value, DateTimeKind.Utc),
-            EndDate = DateTime.SpecifyKind((ev.DtEnd ?? ev.DtStart).Value, DateTimeKind.Utc),
+            StartDate = ev.DtStart.AsUtc,
+            EndDate = (ev.DtEnd ?? ev.DtStart).AsUtc,
             IsAllDay = isAllDay,
         };
 
@@ -388,9 +425,7 @@ public class CalDavController(
             entry.RecurrenceFrequency = rrule.Frequency;
             entry.RecurrenceInterval = rrule.Interval != 1 ? rrule.Interval : null;
             entry.RecurrenceCount = rrule.Count > 0 ? rrule.Count : null;
-            entry.RecurrenceUntil = rrule.Until != null
-                ? DateTime.SpecifyKind(rrule.Until.Value, DateTimeKind.Utc)
-                : null;
+            entry.RecurrenceUntil = rrule.Until?.AsUtc;
         }
 
         return entry;

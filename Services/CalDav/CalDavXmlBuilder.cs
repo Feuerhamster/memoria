@@ -13,6 +13,7 @@ public static class CalDavXmlBuilder
     private static readonly XNamespace Dav = "DAV:";
     private static readonly XNamespace Cal = "urn:ietf:params:xml:ns:caldav";
     private static readonly XNamespace Apple = "http://apple.com/ns/ical/";
+    private static readonly XNamespace Cs = "http://calendarserver.org/ns/";
 
     public static XElement BuildRootResponse()
     {
@@ -22,8 +23,7 @@ public static class CalDavXmlBuilder
                 new XElement(Dav + "prop",
                     new XElement(Dav + "displayname", "Calendars"),
                     new XElement(Dav + "resourcetype",
-                        new XElement(Dav + "collection"),
-                        new XElement(Dav + "principal")
+                        new XElement(Dav + "collection")
                     ),
                     new XElement(Dav + "current-user-principal",
                         new XElement(Dav + "href", "/dav/caldav/principals/me/")
@@ -44,7 +44,7 @@ public static class CalDavXmlBuilder
     // -------------------------------------------------------------------------
 
     /// <summary>Creates a DAV:response element describing a calendar collection (i.e. a Space).</summary>
-    public static XElement CreateCalendarCollection(string href, Space space)
+    public static XElement CreateCalendarCollection(string href, Space space, string? ctag = null)
     {
         var props = new List<XElement?>
         {
@@ -68,6 +68,9 @@ public static class CalDavXmlBuilder
                 new XElement(Dav + "privilege", new XElement(Dav + "unbind"))
             ),
         };
+
+        if (ctag != null)
+            props.Add(new XElement(Cs + "getctag", ctag));
 
         if (!string.IsNullOrEmpty(space.Color))
             props.Add(new XElement(Apple + "calendar-color", space.Color));
@@ -158,6 +161,7 @@ public static class CalDavXmlBuilder
                 new XAttribute(XNamespace.Xmlns + "D", "DAV:"),
                 new XAttribute(XNamespace.Xmlns + "C", Cal.NamespaceName),
                 new XAttribute(XNamespace.Xmlns + "A", Apple.NamespaceName),
+                new XAttribute(XNamespace.Xmlns + "CS", Cs.NamespaceName),
                 responses
             )
         );
