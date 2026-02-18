@@ -35,6 +35,13 @@ public class Post : IAccessManagedRessource
     public Guid? RootParentId { get; set; }
     
     public FileMetadata? File { get; set; }
+
+    /// <summary>
+    /// Optional reference to a CalendarEvent. When set, this post is the "feed entry"
+    /// for that event — other posts can reply to this post via ParentId to form a discussion.
+    /// </summary>
+    public Guid? CalendarEventId { get; set; }
+    public CalendarEntry? CalendarEntry { get; set; }
     // public Ticket? Ticket { get; set; }
     
     public RessourceAccessPolicy AccessPolicy {  get; set; }

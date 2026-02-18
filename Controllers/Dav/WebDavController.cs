@@ -17,7 +17,7 @@ using Microsoft.Extensions.Localization;
 
 namespace Memoria.Controllers;
 
-[Route("webdav")]
+[Route("dav/webdav")]
 [Authorize(AuthenticationSchemes = BasicAuthHandler.SchemeName, Policy = "WebDavFiles")]
 [EnsureWwwAuthenticate]
 public class WebDavController(

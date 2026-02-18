@@ -18,7 +18,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
     public DbSet<FileMetadata> Files { get; set; }
     
     public DbSet<Post> Posts { get; set; }
-    
+    public DbSet<CalendarEntry> CalendarEvents { get; set; }
+
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
     protected override void OnConfiguring(DbContextOptionsBuilder options)
@@ -114,7 +115,38 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
             entity
                 .HasOne<FileMetadata>(e => e.File)
                 .WithMany();
+
+            // Optional reference to a CalendarEvent — null-safe, no cascade
+            entity
+                .HasOne<CalendarEntry>(e => e.CalendarEntry)
+                .WithMany()
+                .HasForeignKey(e => e.CalendarEventId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
+
+        modelBuilder.Entity<CalendarEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(e => e.OwnerUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne<Space>()
+                .WithMany()
+                .HasForeignKey(e => e.SpaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.StartDate);
+            entity.HasIndex(e => e.EndDate);
+            entity.HasIndex(e => new { e.SpaceId, e.StartDate });
+        });
+    }
+
+    private void CreateCalendarEntryModel(ModelBuilder modelBuilder)
+    {
+        
     }
 
     /*private void CreateTicketModel(ModelBuilder modelBuilder)

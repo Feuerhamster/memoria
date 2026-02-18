@@ -6,6 +6,7 @@ using Memoria.Middlewares;
 using Memoria.Models.Config;
 using Memoria.Models.Database;
 using Memoria.Services;
+using Memoria.Services.CalDav;
 using Memoria.Services.WebDav;
 using Memoria.Setup;
 using Microsoft.AspNetCore.Authentication;
@@ -65,6 +66,7 @@ builder.Services.AddScoped<IAccessPolicyHelperService, AccessPolicyHelperService
 // builder.Services.AddScoped<IOnlyOfficeService, OnlyOfficeService>();
 
 builder.Services.AddScoped<ISpaceService, SpaceService>();
+builder.Services.AddScoped<ICalendarService, CalendarService>();
 
 builder.Services.AddHttpClient();
 
@@ -95,6 +97,12 @@ builder.Services.AddAuthorization(options =>
     {
         policy.RequireAuthenticatedUser();
         policy.Requirements.Add(new TokenPermissionRequirement(EUserAppAccessTokenPermissions.Files));
+    });
+    
+    options.AddPolicy("CalDav", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.Requirements.Add(new TokenPermissionRequirement(EUserAppAccessTokenPermissions.Calendar));
     });
 });
 
