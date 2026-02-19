@@ -147,20 +147,20 @@ public class CalDavController(
         if (space == null) return NotFound();
 
         var userId = User.GetUserId();
-        if (!await accessControl.CheckSpaceMembership(space.Id, userId, ct))
-            return Forbid();
+        var isMember = await accessControl.CheckSpaceMembership(space.Id, userId, ct);
+        var maxPolicy = isMember ? RessourceAccessPolicy.Members : RessourceAccessPolicy.Shared;
 
         var depth = GetDepth();
         var calendarHref = CalDavHelpers.BuildCalendarHref(space.Id);
         var ctag = await calendarService.GetCalendarCtag(space.Id, ct);
         var responses = new List<XElement>
         {
-            CalDavXmlBuilder.CreateCalendarCollection(calendarHref, space, ctag)
+            CalDavXmlBuilder.CreateCalendarCollection(calendarHref, space, ctag, canWrite: isMember)
         };
 
         if (depth < 1) return MultiStatus(responses);
-        
-        var eventsMeta = await calendarService.GetAllCalendarEventsMetadata(space.Id, userId, ct);
+
+        var eventsMeta = await calendarService.GetAllCalendarEventsMetadata(space.Id, userId, maxPolicy, ct);
 
         responses.AddRange(eventsMeta.Select(e => CalDavXmlBuilder.CreateEventResponse(space.Id, e, null, false)).ToList());
 
@@ -179,8 +179,8 @@ public class CalDavController(
         if (space == null) return NotFound();
 
         var userId = User.GetUserId();
-        if (!await accessControl.CheckSpaceMembership(space.Id, userId, ct))
-            return Forbid();
+        var isMember = await accessControl.CheckSpaceMembership(space.Id, userId, ct);
+        var maxPolicy = isMember ? RessourceAccessPolicy.Members : RessourceAccessPolicy.Shared;
 
         XDocument doc;
         try
@@ -196,13 +196,13 @@ public class CalDavController(
         var reportType = doc.Root?.Name.LocalName;
 
         if (reportType == "calendar-multiget")
-            return await HandleCalendarMultiget(space, userId, doc, ct);
+            return await HandleCalendarMultiget(space, userId, maxPolicy, doc, ct);
 
         // Default: calendar-query
         var filter = CalDavXmlBuilder.ParseCalendarQuery(doc);
         if (filter == null) return new StatusCodeResult(StatusCodes.Status400BadRequest);
 
-        var events = await calendarService.FindPotentialCalendarEntriesInRange(space.Id, userId, filter.Start, filter.End, ct);
+        var events = await calendarService.FindPotentialCalendarEntriesInRange(space.Id, userId, maxPolicy, filter.Start, filter.End, ct);
 
         var responses = events.Select(e =>
         {
@@ -214,7 +214,7 @@ public class CalDavController(
         return MultiStatus(responses);
     }
 
-    private async Task<IActionResult> HandleCalendarMultiget(Space space, Guid userId, XDocument doc, CancellationToken ct)
+    private async Task<IActionResult> HandleCalendarMultiget(Space space, Guid userId, RessourceAccessPolicy maxPolicy, XDocument doc, CancellationToken ct)
     {
         var dav = XNamespace.Get("DAV:");
 
@@ -234,7 +234,7 @@ public class CalDavController(
         var events = await db.CalendarEvents
             .Where(e => e.SpaceId == space.Id
                         && eventIds.Contains(e.Id)
-                        && (e.AccessPolicy < RessourceAccessPolicy.Private || e.OwnerUserId == userId))
+                        && (e.AccessPolicy <= maxPolicy || e.OwnerUserId == userId))
             .ToListAsync(ct);
 
         var responses = events.Select(e =>

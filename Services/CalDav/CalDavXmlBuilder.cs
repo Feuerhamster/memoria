@@ -44,8 +44,21 @@ public static class CalDavXmlBuilder
     // -------------------------------------------------------------------------
 
     /// <summary>Creates a DAV:response element describing a calendar collection (i.e. a Space).</summary>
-    public static XElement CreateCalendarCollection(string href, Space space, string? ctag = null)
+    public static XElement CreateCalendarCollection(string href, Space space, string? ctag = null, bool canWrite = true)
     {
+        var privilegeSet = canWrite
+            ? new XElement(Dav + "current-user-privilege-set",
+                new XElement(Dav + "privilege", new XElement(Dav + "read")),
+                new XElement(Dav + "privilege", new XElement(Dav + "write")),
+                new XElement(Dav + "privilege", new XElement(Dav + "write-content")),
+                new XElement(Dav + "privilege", new XElement(Dav + "write-properties")),
+                new XElement(Dav + "privilege", new XElement(Dav + "bind")),
+                new XElement(Dav + "privilege", new XElement(Dav + "unbind"))
+            )
+            : new XElement(Dav + "current-user-privilege-set",
+                new XElement(Dav + "privilege", new XElement(Dav + "read"))
+            );
+
         var props = new List<XElement?>
         {
             new XElement(Dav + "displayname", space.Name),
@@ -59,14 +72,7 @@ public static class CalDavXmlBuilder
             new XElement(Cal + "supported-calendar-component-set",
                 new XElement(Cal + "comp", new XAttribute("name", "VEVENT"))
             ),
-            new XElement(Dav + "current-user-privilege-set",
-                new XElement(Dav + "privilege", new XElement(Dav + "read")),
-                new XElement(Dav + "privilege", new XElement(Dav + "write")),
-                new XElement(Dav + "privilege", new XElement(Dav + "write-content")),
-                new XElement(Dav + "privilege", new XElement(Dav + "write-properties")),
-                new XElement(Dav + "privilege", new XElement(Dav + "bind")),
-                new XElement(Dav + "privilege", new XElement(Dav + "unbind"))
-            ),
+            privilegeSet,
         };
 
         if (ctag != null)
