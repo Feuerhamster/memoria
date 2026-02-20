@@ -22,6 +22,8 @@ public class OAuthIdentityProvider {
 	public string ClientSecret { get; set; } = String.Empty;
 	public string RedirectUri { get; set; } = String.Empty;
 	public string CallbackPath { get; set; } = String.Empty;
+	
+	public string DisplayName { get; set; } =  String.Empty;
 }
 
 public class OAuthConfig {
