@@ -12,6 +12,7 @@ public class FileMetadata : IAccessManagedRessource
     public string FileName { get; set; } = string.Empty;
     public string FileHash { get; set; } = string.Empty;
     public DateTime UploadedAt { get; set; }
+    public DateTime ModifiedAt { get; set; }
     public string ContentType { get; set; } = string.Empty;
     public long SizeInBytes { get; set; }
     

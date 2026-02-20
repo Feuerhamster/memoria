@@ -89,7 +89,8 @@ public class FileStorageService : IFileStorageService
                 OwnerUserId = owner.UserId,
                 SpaceId = owner.SpaceId,
                 AccessPolicy = accessPolicy,
-                UploadedAt = DateTime.UtcNow
+                UploadedAt = DateTime.UtcNow,
+                ModifiedAt = DateTime.UtcNow
             };
             
             _dbContext.Files.Add(storedFile);
@@ -149,7 +150,7 @@ public class FileStorageService : IFileStorageService
             // Update metadata in database
             existingFile.FileHash = fileHash;
             existingFile.SizeInBytes = fileSize;
-            existingFile.UploadedAt = DateTime.UtcNow;
+            existingFile.ModifiedAt = DateTime.UtcNow;
 
             _dbContext.Files.Update(existingFile);
             await _dbContext.SaveChangesAsync(cancellationToken);
