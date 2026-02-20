@@ -37,5 +37,7 @@ public class FileUpdateRequest : IDataUpdateObject<FileMetadata>
         {
             file.AccessPolicy = this.AccessPolicy.Value;
         }
+        
+        file.UploadedAt = DateTime.UtcNow;
     }
 }
