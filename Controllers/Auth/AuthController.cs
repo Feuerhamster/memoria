@@ -18,6 +18,12 @@ namespace Memoria.Controllers;
 [ApiController]
 [Route("auth/oidc")]
 public class AuthController(IAuthenticationService authService, AppDbContext db, IOptions<OAuthConfig> oauthConfig) : ControllerBase {
+
+	[HttpGet]
+	public async Task<ActionResult<List<OidcProviderListEntryResponse>>> ListProviders()
+	{
+		return oauthConfig.Value.IdentityProviders.Select(idp => new OidcProviderListEntryResponse(idp)).ToList();
+	}
 	
 	[HttpGet("flow/{provider}")]
 	public async Task<ActionResult> OAuthIdpInitFlow(string provider)

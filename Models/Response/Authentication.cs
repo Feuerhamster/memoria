@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
 using Memoria.Models.Database;
 using System.Security.Claims;
+using Memoria.Models.Config;
 
 namespace Memoria.Models.Response;
 
@@ -30,4 +31,10 @@ public class AddAppAccessTokenResponse
 {
 	public UserAppAccessToken AppAccessToken { get; set; }
 	public string Secret { get; set; }
+}
+
+public class OidcProviderListEntryResponse(OAuthIdentityProvider provider)
+{
+	public string DisplayName { get; set; } = provider.DisplayName;
+	public string Identifier { get; set; } = provider.Identifier;
 }

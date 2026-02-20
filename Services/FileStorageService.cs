@@ -21,6 +21,8 @@ public interface IFileStorageService
     Task<FileMetadata?> GetFileMetadata(Guid fileId, CancellationToken ct = default);
 
     Task<bool> DeleteFile(FileMetadata file, CancellationToken cancellationToken = default);
+
+    public void EnsureStorageDirectoryExists();
 }
 
 public class FileStorageService : IFileStorageService
@@ -259,7 +261,7 @@ public class FileStorageService : IFileStorageService
         return sanitized;
     }
     
-    private void EnsureStorageDirectoryExists()
+    public void EnsureStorageDirectoryExists()
     {
         if (!Directory.Exists(_config.StoragePath))
         {
