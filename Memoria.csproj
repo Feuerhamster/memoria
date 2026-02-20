@@ -12,6 +12,7 @@
         <PackageReference Include="EFCoreSecondLevelCacheInterceptor.HybridCache" Version="5.3.9" />
         <PackageReference Include="EFCoreSecondLevelCacheInterceptor.MemoryCache" Version="5.3.9" />
         <PackageReference Include="jose-jwt" Version="5.2.0" />
+        <PackageReference Include="Magick.NET-Q16-AnyCPU" Version="14.10.2" />
         <PackageReference Include="MessagePack" Version="3.1.4" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.3" />
         <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.3" />

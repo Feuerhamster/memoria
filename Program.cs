@@ -63,6 +63,7 @@ builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IAccessPolicyHelperService, AccessPolicyHelperService>();
 // builder.Services.AddScoped<IOnlyOfficeService, OnlyOfficeService>();
+builder.Services.AddScoped<IImageService, ImageService>();
 
 builder.Services.AddScoped<ISpaceService, SpaceService>();
 
