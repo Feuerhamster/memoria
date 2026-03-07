@@ -5,6 +5,7 @@ using Memoria.Models;
 using Memoria.Models.Database;
 using Memoria.Models.Request;
 using Memoria.Services;
+using Memoria.Services.RadicaleClient;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,7 @@ namespace Memoria.Controllers;
 [ApiController]
 [Route("/spaces")]
 [Authorize]
-public class SpaceController(AppDbContext database, ISpaceService spaceService) : ControllerBase
+public class SpaceController(AppDbContext database, ISpaceService spaceService, IRadicaleClient radicale) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<List<Space>>> GetAllSpacesForUser()
@@ -42,6 +43,15 @@ public class SpaceController(AppDbContext database, ISpaceService spaceService) 
 
         if (res > 0)
         {
+            try
+            {
+                await radicale.CreateCalendarCollection(newSpace.Id);
+                await radicale.CreateContactsCollection(newSpace.Id);
+            }
+            catch
+            {
+                // Radicale unavailable — collections will be created lazily on first use
+            }
             return newSpace;
         }
         else
@@ -83,11 +93,20 @@ public class SpaceController(AppDbContext database, ISpaceService spaceService) 
         }
         
         database.Spaces.Remove(space);
-        
+
         var res = await database.SaveChangesAsync();
 
         if (res > 0)
         {
+            try
+            {
+                await radicale.DeleteCalendarCollection(spaceId);
+                await radicale.DeleteContactsCollection(spaceId);
+            }
+            catch
+            {
+                // Radicale unavailable — orphaned collections are benign
+            }
             return Ok();
         }
         else

@@ -6,7 +6,7 @@ using Memoria.Middlewares;
 using Memoria.Models.Config;
 using Memoria.Models.Database;
 using Memoria.Services;
-using Memoria.Services.CalDav;
+using Memoria.Services.RadicaleClient;
 using Memoria.Services.WebDav;
 using Memoria.Setup;
 using Microsoft.AspNetCore.Authentication;
@@ -54,6 +54,7 @@ builder.Services.Configure<OAuthConfig>(builder.Configuration.GetSection(OAuthCo
 builder.Services.Configure<SessionConfig>(builder.Configuration.GetSection(SessionConfig.ConfigKey));
 builder.Services.Configure<FileConfig>(builder.Configuration.GetSection(FileConfig.ConfigKey));
 builder.Services.Configure<OnlyOfficeConfig>(builder.Configuration.GetSection(OnlyOfficeConfig.ConfigKey));
+builder.Services.Configure<RadicaleConfig>(builder.Configuration.GetSection(RadicaleConfig.ConfigKey));
 
 builder.Services.AddConfiguredDbContext();
 
@@ -66,7 +67,16 @@ builder.Services.AddScoped<IAccessPolicyHelperService, AccessPolicyHelperService
 // builder.Services.AddScoped<IOnlyOfficeService, OnlyOfficeService>();
 
 builder.Services.AddScoped<ISpaceService, SpaceService>();
-builder.Services.AddScoped<ICalendarService, CalendarService>();
+builder.Services.AddScoped<IRadicaleClient, RadicaleClient>();
+
+var radicaleBaseUrl = builder.Configuration.GetSection(RadicaleConfig.ConfigKey).GetValue<string>("BaseUrl")
+                      ?? "http://127.0.0.1:5232";
+
+builder.Services.AddHttpClient("radicale", client =>
+{
+    client.BaseAddress = new Uri(radicaleBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 
 builder.Services.AddHttpClient();
 
@@ -104,6 +114,12 @@ builder.Services.AddAuthorization(options =>
     {
         policy.RequireAuthenticatedUser();
         policy.Requirements.Add(new TokenPermissionRequirement(EUserAppAccessTokenPermissions.Calendar));
+    });
+
+    options.AddPolicy("CardDav", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.Requirements.Add(new TokenPermissionRequirement(EUserAppAccessTokenPermissions.Contacts));
     });
 });
 

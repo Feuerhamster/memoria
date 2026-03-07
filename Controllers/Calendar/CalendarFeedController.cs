@@ -1,8 +1,10 @@
 using Ical.Net;
+using Ical.Net.CalendarComponents;
+using Ical.Net.DataTypes;
 using Ical.Net.Serialization;
 using Memoria.Models;
-using Memoria.Models.Database;
-using Memoria.Services.CalDav;
+using Memoria.Services;
+using Memoria.Services.RadicaleClient;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,11 +17,11 @@ namespace Memoria.Controllers.CalendarFeed;
 /// </summary>
 [Route("calendar")]
 [AllowAnonymous]
-public class CalendarFeedController(AppDbContext db) : ControllerBase
+public class CalendarFeedController(AppDbContext db, IRadicaleClient radicale) : ControllerBase
 {
     /// <summary>
     /// Returns all public calendar entries of a space as a subscribable iCal feed.
-    /// Only events with <see cref="RessourceAccessPolicy.Public"/> are included.
+    /// Only events with <see cref="RessourceAccessPolicy.Public"/> access policy are included.
     /// </summary>
     [HttpGet("{spaceId:guid}/public.ics")]
     public async Task<IActionResult> GetPublicFeed(Guid spaceId, CancellationToken ct)
@@ -30,7 +32,7 @@ public class CalendarFeedController(AppDbContext db) : ControllerBase
 
         if (space == null) return NotFound();
 
-        var events = await db.CalendarEvents
+        var publicEntries = await db.CalendarEventCache
             .AsNoTracking()
             .Where(e => e.SpaceId == spaceId && e.AccessPolicy == RessourceAccessPolicy.Public)
             .ToListAsync(ct);
@@ -41,12 +43,24 @@ public class CalendarFeedController(AppDbContext db) : ControllerBase
             calendar.AddProperty("X-WR-CALDESC", space.Description);
         calendar.AddProperty("X-WR-TIMEZONE", "UTC");
 
-        foreach (var entry in events)
-            calendar.Events.Add(CalDavHelpers.CalendarEntryToICal(entry));
+        foreach (var entry in publicEntries)
+        {
+            try
+            {
+                var ics = await radicale.GetEventIcs(spaceId, entry.Id, ct);
+                var parsed = Ical.Net.Calendar.Load(ics);
+                var ev = parsed?.Events.FirstOrDefault();
+                if (ev != null) calendar.Events.Add(ev);
+            }
+            catch
+            {
+                // Skip events that can't be retrieved from Radicale
+            }
+        }
 
-        var ics = new CalendarSerializer().SerializeToString(calendar);
-        if (ics == null) return StatusCode(StatusCodes.Status500InternalServerError);
+        var result = new CalendarSerializer().SerializeToString(calendar);
+        if (result == null) return StatusCode(StatusCodes.Status500InternalServerError);
 
-        return Content(ics, "text/calendar; charset=utf-8");
+        return Content(result, "text/calendar; charset=utf-8");
     }
 }

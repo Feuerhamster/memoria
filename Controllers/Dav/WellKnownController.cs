@@ -25,6 +25,11 @@ public class WellKnownController : ControllerBase
 
     [AllowAnonymous]
     [AcceptVerbs("GET", "PROPFIND", "OPTIONS")]
+    [Route(".well-known/carddav")]
+    public IActionResult WellKnownCardDav() => RedirectPermanent("/dav/carddav/");
+
+    [AllowAnonymous]
+    [AcceptVerbs("GET", "PROPFIND", "OPTIONS")]
     [Route(".well-known/webdav")]
     public IActionResult WellKnownWebDav() => RedirectPermanent("/dav/webdav/");
 

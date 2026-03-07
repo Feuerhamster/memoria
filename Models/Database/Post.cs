@@ -1,4 +1,5 @@
 using Memoria.Models.Request;
+using Memoria.Models;
 
 namespace Memoria.Models.Database;
 
@@ -37,11 +38,9 @@ public class Post : IAccessManagedRessource
     public FileMetadata? File { get; set; }
 
     /// <summary>
-    /// Optional reference to a CalendarEvent. When set, this post is the "feed entry"
-    /// for that event — other posts can reply to this post via ParentId to form a discussion.
+    /// Optional reference to a CalendarEvent in Radicale. Plain Guid — no FK constraint.
     /// </summary>
     public Guid? CalendarEventId { get; set; }
-    public CalendarEntry? CalendarEntry { get; set; }
     // public Ticket? Ticket { get; set; }
     
     public RessourceAccessPolicy AccessPolicy {  get; set; }

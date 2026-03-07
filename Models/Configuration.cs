@@ -52,3 +52,10 @@ public class OnlyOfficeConfig
 	public string CallbackUrl { get; set; } = string.Empty;
 	public string? ExternalApiUrl { get; set; }
 }
+
+public class RadicaleConfig
+{
+	public const string ConfigKey = "Radicale";
+	public string BaseUrl { get; set; } = "http://127.0.0.1:5232";
+	public string DataPath { get; set; } = "/var/lib/memoria/radicale";
+}

@@ -10,15 +10,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
 {
     public DbSet<User> Users { get; set; }
     public DbSet<UserRefreshSession> Sessions { get; set; }
-    
+
     public DbSet<UserAppAccessToken> AppAccessTokens { get; set; }
-    
+
     public DbSet<Space> Spaces { get; set; }
-    
+
     public DbSet<FileMetadata> Files { get; set; }
-    
+
     public DbSet<Post> Posts { get; set; }
-    public DbSet<CalendarEntry> CalendarEvents { get; set; }
+
+    public DbSet<CalendarEventCache> CalendarEventCache { get; set; }
+    public DbSet<ContactCache> ContactCache { get; set; }
 
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
@@ -26,11 +28,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
     {
         options.UseSqlite($"Data Source={config.Value.ConnectionString}");
     }
-    
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         this.CreateUserManagementModels(modelBuilder);
-        
+
         modelBuilder.Entity<Space>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -42,7 +44,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
                 .HasForeignKey(e => e.ImageId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
-        
+
         modelBuilder.Entity<FileMetadata>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -50,15 +52,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
                 .WithMany()
                 .HasForeignKey(e => e.OwnerUserId)
                 .OnDelete(DeleteBehavior.SetNull);
-            
+
             entity.HasOne<Space>()
                 .WithMany()
                 .HasForeignKey(f => f.SpaceId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
-        
+
         this.CreatePostModel(modelBuilder);
-        //this.CreateTicketModel(modelBuilder);
+        this.CreateRadicaleCacheModels(modelBuilder);
     }
 
     private void CreateUserManagementModels(ModelBuilder modelBuilder)
@@ -69,7 +71,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
             entity.HasIndex(e => e.OidcSub).IsUnique();
             entity.HasIndex(e => e.OidcProvider).IsUnique();
         });
-        
+
         modelBuilder.Entity<UserRefreshSession>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -106,7 +108,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
                 .WithMany()
                 .HasForeignKey(e => e.ParentId)
                 .OnDelete(DeleteBehavior.SetNull);
-            
+
             entity.HasOne<Post>()
                 .WithMany()
                 .HasForeignKey(e => e.RootParentId)
@@ -116,15 +118,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
                 .HasOne<FileMetadata>(e => e.File)
                 .WithMany();
 
-            // Optional reference to a CalendarEvent — null-safe, no cascade
-            entity
-                .HasOne<CalendarEntry>(e => e.CalendarEntry)
-                .WithMany()
-                .HasForeignKey(e => e.CalendarEventId)
-                .OnDelete(DeleteBehavior.SetNull);
+            // CalendarEventId is a plain Guid? column — no FK constraint to Radicale cache
+            entity.Property(e => e.CalendarEventId);
         });
+    }
 
-        modelBuilder.Entity<CalendarEntry>(entity =>
+    private void CreateRadicaleCacheModels(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CalendarEventCache>(entity =>
         {
             entity.HasKey(e => e.Id);
 
@@ -138,42 +139,24 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
                 .HasForeignKey(e => e.SpaceId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasIndex(e => e.StartDate);
-            entity.HasIndex(e => e.EndDate);
-            entity.HasIndex(e => new { e.SpaceId, e.StartDate });
+            entity.HasIndex(e => e.SpaceId);
         });
-    }
 
-    private void CreateCalendarEntryModel(ModelBuilder modelBuilder)
-    {
-        
-    }
-
-    /*private void CreateTicketModel(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<Ticket>(entity =>
+        modelBuilder.Entity<ContactCache>(entity =>
         {
             entity.HasKey(e => e.Id);
-            
+
             entity.HasOne<User>()
                 .WithMany()
                 .HasForeignKey(e => e.OwnerUserId)
                 .OnDelete(DeleteBehavior.SetNull);
-            
+
             entity.HasOne<Space>()
                 .WithMany()
-                .HasForeignKey(f => f.SpaceId)
-                .OnDelete(DeleteBehavior.SetNull);
-            
-            entity.HasOne<Post>(t => t.Post)
-                .WithOne(p => p.Ticket)
-                .HasForeignKey<Post>()
+                .HasForeignKey(e => e.SpaceId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasMany(t => t.SubTasks)
-                .WithOne()
-                .HasForeignKey(t => t.Id)
-                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.SpaceId);
         });
-    }*/
+    }
 }
