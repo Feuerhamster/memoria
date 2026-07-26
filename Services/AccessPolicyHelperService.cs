@@ -14,6 +14,7 @@ public interface IAccessPolicyHelperService
     public Task<bool> CheckAccessPolicy(RessourceAccessPolicy policy, AccessIntent intention, Guid ressourceOwnerId, ClaimsPrincipal user, Guid? spaceId = null);
     public Task<bool> CheckAccessPolicy(IAccessManagedRessource ressource, AccessIntent intention, ClaimsPrincipal user);
     public Task<bool> CheckSpaceMembership(Guid spaceId, Guid userId, CancellationToken ct = default);
+    public Task<List<Guid>> GetMemberSpaceIds(Guid userId, CancellationToken ct = default);
 }
 
 public class AccessPolicyHelperService(AppDbContext db) : IAccessPolicyHelperService
@@ -74,5 +75,15 @@ public class AccessPolicyHelperService(AppDbContext db) : IAccessPolicyHelperSer
             .Cacheable()
             .AsNoTracking()
             .AnyAsync(s => s.Id.Equals(spaceId) && (s.OwnerUserId.Equals(userId) || s.Members.Any(m => m.Id.Equals(userId))), ct);
+    }
+
+    public Task<List<Guid>> GetMemberSpaceIds(Guid userId, CancellationToken ct = default)
+    {
+        return db.Spaces
+            .Cacheable()
+            .AsNoTracking()
+            .Where(s => s.OwnerUserId.Equals(userId) || s.Members.Any(m => m.Id.Equals(userId)))
+            .Select(s => s.Id)
+            .ToListAsync(ct);
     }
 }

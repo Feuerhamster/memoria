@@ -25,10 +25,7 @@ public class TimelineController(AppDbContext db, IAccessPolicyHelperService acce
     {
         var user = this.User.GetAuthClaimsData();
 
-        var memberSpaceIds = await db.Spaces
-            .Where(s => s.OwnerUserId.Equals(user.UserId) || s.Members.Any(m => m.Id.Equals(user.UserId)))
-            .Select(s => s.Id)
-            .ToListAsync(ct);
+        var memberSpaceIds = await accessHelper.GetMemberSpaceIds(user.UserId, ct);
 
         var query = db.Posts
             .Where(p => p.ParentId == null && !p.IsArchived)

@@ -1,5 +1,6 @@
 using Memoria.Models.Config;
 using Memoria.Models.Database;
+using Memoria.Services.Search;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -26,6 +27,53 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
         options.UseSqlite($"Data Source={config.Value.ConnectionString}");
+    }
+
+    /// <summary>
+    /// Keeps the <c>SearchIndexFts</c> full-text index (see <see cref="SearchableTypeRegistry"/>)
+    /// in sync with every write to a searchable entity, in the same transaction — no controller
+    /// has to remember to update the search index itself.
+    /// </summary>
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        var searchChanges = this.ChangeTracker.Entries()
+            .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .Select(e => new { e.State, Descriptor = SearchableTypeRegistry.ForClrType(e.Entity.GetType()), e.Entity })
+            .Where(x => x.Descriptor != null)
+            .Select(x => (x.State, Descriptor: x.Descriptor!, Change: x.Descriptor!.Extract(x.Entity)))
+            .ToList();
+
+        if (searchChanges.Count == 0)
+        {
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var transaction = await this.Database.BeginTransactionAsync(cancellationToken);
+
+        var result = await base.SaveChangesAsync(cancellationToken);
+
+        foreach (var change in searchChanges)
+        {
+            var entityId = change.Change.Id.ToString();
+
+            await this.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM SearchIndexFts WHERE entity_id = {entityId}", cancellationToken);
+
+            if (change.State != EntityState.Deleted)
+            {
+                var entityType = change.Descriptor.Type.ToString();
+                var title = change.Change.Title;
+                var body = change.Change.Body;
+
+                await this.Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT INTO SearchIndexFts (entity_type, entity_id, title, body) VALUES ({entityType}, {entityId}, {title}, {body})",
+                    cancellationToken);
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return result;
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -108,7 +108,20 @@ var app = builder.Build();
 
 using (var migrationScope = app.Services.CreateScope())
 {
-    migrationScope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
+    var migrationDb = migrationScope.ServiceProvider.GetRequiredService<AppDbContext>();
+    migrationDb.Database.Migrate();
+
+    // FTS5 virtual table backing global full-text search. Not an EF migration on purpose:
+    // dotnet ef migrations add doesn't know about virtual tables, and this project still squashes
+    // its migration history during early development — an idempotent startup statement survives that.
+    migrationDb.Database.ExecuteSqlRaw("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS SearchIndexFts USING fts5(
+            entity_type UNINDEXED,
+            entity_id UNINDEXED,
+            title,
+            body
+        );
+        """);
 }
 
 // Configure the HTTP request pipeline.
