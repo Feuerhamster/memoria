@@ -23,6 +23,8 @@ public class Post : IAccessManagedRessource
 
         this.ParentId = create.ParentId;
         this.RootParentId = create.RootParentId;
+
+        this.IsSpaceDocument = create.IsSpaceDocument;
     }
 
     public Guid Id { get; set; }

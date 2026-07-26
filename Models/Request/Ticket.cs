@@ -34,6 +34,15 @@ public class UpdateTicketRequest : IDataUpdateObject<Ticket>
     public ETicketPriority? Priority { get; set; }
     public DateTime? DueDate { get; set; }
 
+    /// <summary>Full replacement, not a merge — send the complete list you want the ticket to end up with.</summary>
+    public List<SubTask>? SubTasks { get; set; }
+
+    /// <summary>
+    /// Full replacement of assignees, not a merge. Resolving the ids to <see cref="User"/> needs
+    /// the database, so this can't be applied here — the controller handles it after calling Apply.
+    /// </summary>
+    public List<Guid>? AssigneeIds { get; set; }
+
     public void Apply(Ticket ticket)
     {
         if (this.Title != null)
@@ -59,6 +68,11 @@ public class UpdateTicketRequest : IDataUpdateObject<Ticket>
         if (this.DueDate != null)
         {
             ticket.DueDate = this.DueDate;
+        }
+
+        if (this.SubTasks != null)
+        {
+            ticket.SubTasks = this.SubTasks;
         }
 
         ticket.ModifiedAt = DateTime.UtcNow;

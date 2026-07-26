@@ -15,6 +15,8 @@ public class CreatePostRequest
 
     public Guid? ParentId { get; set; }
     public Guid? RootParentId { get; set; }
+
+    public bool IsSpaceDocument { get; set; }
 }
 
 public class UpdatePostRequest : IDataUpdateObject<Post>

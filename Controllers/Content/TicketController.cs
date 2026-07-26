@@ -85,6 +85,7 @@ public class TicketController(AppDbContext db, IAccessPolicyHelperService access
     {
         var ticket = await db.Tickets
             .Include(t => t.Post)
+            .Include(t => t.Assignees)
             .FirstOrDefaultAsync(t => t.Id.Equals(ticketId), ct);
 
         if (ticket == null) return new NotFoundApiException();
@@ -93,6 +94,11 @@ public class TicketController(AppDbContext db, IAccessPolicyHelperService access
         if (!hasAccess) return new AccessDeniedApiException();
 
         update.Apply(ticket);
+
+        if (update.AssigneeIds != null)
+        {
+            ticket.Assignees = await db.Users.Where(u => update.AssigneeIds.Contains(u.Id)).ToListAsync(ct);
+        }
 
         var changed = await db.SaveChangesAsync(ct);
 
