@@ -30,7 +30,7 @@ public class FileController(AppDbContext db, IFileStorageService fileService, IA
 
         if (file == null)
         {
-            return new NotFoundApiException(new FileNotFoundException());
+            return new NotFoundApiException("file not found");
         }
 
         var hasAccess = await accessHelper.CheckAccessPolicy(file, AccessIntent.Read, this.User);
@@ -39,12 +39,15 @@ public class FileController(AppDbContext db, IFileStorageService fileService, IA
         {
             return new AccessDeniedApiException();
         }
-        
+
         var result = await fileService.GetFile(fileId, ct);
 
         if (result.IsFailed)
         {
-            return new NotFoundApiException(result.Exception);
+            return result.SelectApiError(
+                expected: new NotFoundApiException(result.FailureDetails),
+                unexpected: new OperationFailedApiException(result.FailureDetails)
+            );
         }
         
         return File(
@@ -66,12 +69,12 @@ public class FileController(AppDbContext db, IFileStorageService fileService, IA
 
             if (!spaceExists)
             {
-                return new NotFoundApiException(new Exception("Space not found"));
+                return new NotFoundApiException("Space not found");
             }
-            
+
             var hasAccess = await accessHelper.CheckSpaceMembership(user.UserId, upload.SpaceId.Value, ct);
-            
-            if (!hasAccess) return new AccessDeniedApiException(new Exception("No space member"));
+
+            if (!hasAccess) return new AccessDeniedApiException("No space member");
         }
 
         var owner = new RessourceOwnerHelper
@@ -97,7 +100,7 @@ public class FileController(AppDbContext db, IFileStorageService fileService, IA
             accessPolicy,
             ct);
         
-        return fileMeta.IsOk ? fileMeta.Value : new OperationFailedApiException(fileMeta.Exception);
+        return fileMeta.IsOk ? fileMeta.Value : new OperationFailedApiException(fileMeta.FailureDetails);
     }
 
     [HttpPatch("{fileId:guid}")]
@@ -107,7 +110,7 @@ public class FileController(AppDbContext db, IFileStorageService fileService, IA
 
         if (file == null)
         {
-            return new NotFoundApiException(new FileNotFoundException());
+            return new NotFoundApiException("file not found");
         }
 
         var hasAccess = await accessHelper.CheckAccessPolicy(file, AccessIntent.Write, this.User);
@@ -127,7 +130,7 @@ public class FileController(AppDbContext db, IFileStorageService fileService, IA
 
         if (file == null)
         {
-            return new NotFoundApiException(new FileNotFoundException());
+            return new NotFoundApiException("file not found");
         }
 
         var hasAccess = await accessHelper.CheckAccessPolicy(file, AccessIntent.Write, this.User);

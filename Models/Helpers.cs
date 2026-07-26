@@ -45,4 +45,11 @@ public interface IAccessManagedRessource
     public Guid OwnerUserId { get; }
     public Guid? SpaceId { get; }
     public RessourceAccessPolicy  AccessPolicy { get; }
+
+    /// <summary>
+    /// Whether this ressource may be surfaced to AI context providers (e.g. MCP).
+    /// Independent of <see cref="AccessPolicy"/>, since human access rules don't automatically
+    /// imply it's safe or desired to hand the content to an AI/agent.
+    /// </summary>
+    public bool ContextAvailability { get; }
 }

@@ -25,15 +25,7 @@
         <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.3.0" />
         <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.15.0" />
         <PackageReference Include="MyCSharp.HttpUserAgentParser" Version="3.0.28" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <EmbeddedResource Update="Ressources\Controllers\WebDavController.de.resx">
-        <Generator>ResXFileCodeGenerator</Generator>
-      </EmbeddedResource>
-      <EmbeddedResource Update="Ressources\Controllers\WebDavController.en.resx">
-        <Generator>ResXFileCodeGenerator</Generator>
-      </EmbeddedResource>
+        <PackageReference Include="Scalar.AspNetCore" Version="2.16.16" />
     </ItemGroup>
 
     <ItemGroup>

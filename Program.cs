@@ -6,7 +6,6 @@ using Memoria.Middlewares;
 using Memoria.Models.Config;
 using Memoria.Models.Database;
 using Memoria.Services;
-using Memoria.Services.WebDav;
 using Memoria.Setup;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -15,6 +14,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
+using Scalar.AspNetCore;
 using AppDbContext = Memoria.AppDbContext;
 using AuthenticationService = Memoria.Services.AuthenticationService;
 using IAuthenticationService = Memoria.Services.IAuthenticationService;
@@ -70,7 +70,6 @@ builder.Services.AddScoped<ISpaceService, SpaceService>();
 builder.Services.AddHttpClient();
 
 builder.Services.AddSingleton<IKeyService, KeyService>();
-builder.Services.AddSingleton<IWebDavLockService, WebDavLockService>();
 
 builder.Services.AddSingleton<IConfigureOptions<CookieAuthenticationOptions>, ConfigureCookieOptions>();
 builder.Services.AddSingleton<IConfigureOptions<OpenIdConnectOptions>, ConfigureOidcOptions>();
@@ -89,15 +88,6 @@ foreach (var idp in oidcOptions.IdentityProviders)
 }
 
 builder.Services.AddSingleton<IAuthorizationHandler, TokenPermissionHandler>();
-
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("WebDavFiles", policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.Requirements.Add(new TokenPermissionRequirement(EUserAppAccessTokenPermissions.Files));
-    });
-});
 
 builder.Services.AddDataProtection().SetApplicationName(DATA_PROTECTION_APPLICATION_NAME).PersistKeysToDbContext<AppDbContext>();
 
@@ -124,6 +114,7 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.MapScalarApiReference();
     app.UseCors();
 }
 else

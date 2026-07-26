@@ -30,6 +30,8 @@ public class Space : IAccessManagedRessource
     public List<User> Members { get; set; }
     
     public RessourceAccessPolicy AccessPolicy { get; set; }
-    
+
+    public bool ContextAvailability { get; set; } = true;
+
     public bool AllowJoins { get; set; }
 }

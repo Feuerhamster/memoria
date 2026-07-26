@@ -27,7 +27,7 @@ public class KeyService : IKeyService {
 		}
 		
 		this._mainSecret = Encoding.UTF8.GetBytes(secret);
-		this.OidcTransferTokenKey = this.GenerateDerivedSecret("", 32);
+		this.OidcTransferTokenKey = this.GenerateDerivedSecret("oidc-transfer-token", 32);
 	}
 
 	/// <summary>

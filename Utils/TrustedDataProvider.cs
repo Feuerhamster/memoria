@@ -4,8 +4,6 @@ using System.Text;
 
 namespace Memoria.Utils;
 
-public class VerifyFailedException() : Exception("Hash verification failed");
-
 public static class TrustedDataProvider {
 	/// <summary>
 	/// Generate a signed hash of a string
@@ -34,28 +32,28 @@ public static class TrustedDataProvider {
 		return builder.ToString();
 	}
 
-	public static Result<T> DecodeAndVerifyData<T>(string raw, byte[] secret) {
+	public static Result<T> DecodeAndVerifyData<T>(string raw, byte[] secret) where T : class {
 		byte[] hash;
 		byte[] rawData;
 
 		var hashLength = 64;
-		
+
 		try {
 			hash = Convert.FromHexString(raw.Substring(raw.Length - hashLength, hashLength));
 			rawData = Convert.FromBase64String(raw.Substring(0, raw.Length - hashLength));
 		}
 		catch (Exception e) {
-			return new Result<T>(e);
+			return Result<T>.Failure(e);
 		}
-		
+
 		var signature = GenerateSignedHash(rawData, secret);
-		
-		var data = MessagePackSerializer.Deserialize<T>(rawData, MessagePack.Resolvers.ContractlessStandardResolver.Options);
 
 		if (!hash.SequenceEqual(signature)) {
-			return new Result<T>(new VerifyFailedException());
+			return Result<T>.Failure("Hash verification failed");
 		}
-		
-		return new Result<T>(data);
+
+		var data = MessagePackSerializer.Deserialize<T>(rawData, MessagePack.Resolvers.ContractlessStandardResolver.Options);
+
+		return Result<T>.Success(data);
 	}
 }

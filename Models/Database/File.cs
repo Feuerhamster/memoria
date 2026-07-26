@@ -17,4 +17,6 @@ public class FileMetadata : IAccessManagedRessource
     public long SizeInBytes { get; set; }
     
     public RessourceAccessPolicy  AccessPolicy { get; set; }
+
+    public bool ContextAvailability { get; set; } = true;
 }

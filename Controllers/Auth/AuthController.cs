@@ -44,7 +44,7 @@ public class AuthController(IAuthenticationService authService, AppDbContext db,
 		var oidc = authService.DecodeAndVerifyOidcTransferToken(login.Token);
 		
 		if (oidc.IsFailed) {
-			return new LoginFailedApiException(oidc.Exception);
+			return new LoginFailedApiException(oidc.FailureDetails);
 		}
 
 		var user = await db.Users.Where(u => u.OidcProvider == oidc.Value.Provider && u.OidcSub == oidc.Value.Subject)

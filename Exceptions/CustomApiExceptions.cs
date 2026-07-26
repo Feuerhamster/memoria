@@ -3,107 +3,107 @@ using Microsoft.AspNetCore.Mvc;
 namespace Memoria.Exceptions;
 
 public class CustomApiException : ObjectResult {
-	protected CustomApiException(int? statusCode, string error, Exception? exception = null) : base(null) {
+	protected CustomApiException(int? statusCode, string error, string? details = null) : base(null) {
 		base.StatusCode = statusCode ?? StatusCodes.Status400BadRequest;
-		base.Value = new { Error = error, Detail = exception?.ToString() };
+		base.Value = new { Error = error, Detail = details };
 	}
 }
 
-public class LoginFailedApiException(Exception? e = null)
+public class LoginFailedApiException(string? details = null)
     : CustomApiException(
         statusCode: StatusCodes.Status400BadRequest,
         error: "login_failed",
-        exception: e
+        details: details
     )
 {
 }
 
-public class LogoutFailedApiException(Exception? e = null)
+public class LogoutFailedApiException(string? details = null)
     : CustomApiException(
         statusCode: StatusCodes.Status400BadRequest,
         error: "logout_failed",
-        exception: e
+        details: details
     )
 {
 }
 
-public class ValidationErrorApiException(Exception? e = null)
+public class ValidationErrorApiException(string? details = null)
     : CustomApiException(
         statusCode: StatusCodes.Status422UnprocessableEntity,
         error: "validation_error",
-        exception: e
+        details: details
     )
 {
 }
 
-public class InvalidAuthorizationApiException(Exception? e = null)
+public class InvalidAuthorizationApiException(string? details = null)
     : CustomApiException(
         statusCode: StatusCodes.Status401Unauthorized,
         error: "invalid_authorization",
-        exception: e
+        details: details
     )
 {
 }
 
-public class NotFoundApiException(Exception? e = null)
+public class NotFoundApiException(string? details = null)
     : CustomApiException(
         statusCode: StatusCodes.Status404NotFound,
         error: "not_found",
-        exception: e
+        details: details
     )
 {
 }
 
-public class OperationFailedApiException(Exception? e = null)
+public class OperationFailedApiException(string? details = null)
     : CustomApiException(
         statusCode: StatusCodes.Status500InternalServerError,
         error: "operation_failed",
-        exception: e
+        details: details
     )
 {
 }
 
-public class ConflictApiException(Exception? e = null)
+public class ConflictApiException(string? details = null)
     : CustomApiException(
         statusCode: StatusCodes.Status409Conflict,
         error: "conflict",
-        exception: e
+        details: details
     )
 {
 }
 
-public class ActionNotAllowedApiException(Exception? e = null)
+public class ActionNotAllowedApiException(string? details = null)
     : CustomApiException(
         statusCode: StatusCodes.Status403Forbidden,
         error: "action_not_allowed",
-        exception: e
+        details: details
     )
 {
 }
 
-public class AccessDeniedApiException(Exception? e = null)
+public class AccessDeniedApiException(string? details = null)
     : CustomApiException(
         statusCode: StatusCodes.Status403Forbidden,
         error: "access_denied",
-        exception: e
+        details: details
     )
 {
 }
 
-public class InvalidRecipeSourceApiException(Exception? e = null)
+public class InvalidRecipeSourceApiException(string? details = null)
 	: CustomApiException(
 		statusCode: StatusCodes.Status400BadRequest,
 		error: "invalid_recipe_source",
-		exception: e ?? new Exception("This recipe source is invalid or does not work")
+		details: details ?? "This recipe source is invalid or does not work"
 	)
 {
 }
 
-public class ApplicationUnhealthyApiException(Exception? e = null)
+public class ApplicationUnhealthyApiException(string? details = null)
 	: CustomApiException(
 		statusCode: StatusCodes.Status503ServiceUnavailable,
 		error: "application_unhealthy",
-		exception: e ?? new Exception("The healthcheck on this application resulted in an unhealthy diagnosis")
+		details: details ?? "The healthcheck on this application resulted in an unhealthy diagnosis"
 	)
 {
 }

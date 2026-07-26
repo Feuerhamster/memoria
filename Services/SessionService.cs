@@ -5,14 +5,13 @@ using Memoria.Models.Database;
 using Microsoft.Extensions.Options;
 using Memoria.Services;
 using MyCSharp.HttpUserAgentParser;
-using Memoria.Exceptions;
 using Memoria.Models.Config;
 using Memoria.Utils;
 
 public interface ISessionService {
 	Task<UserRefreshSession> CreateSession(Guid userId, string? userAgent);
 	Task<Result<UserRefreshSession>> RenewSession(Guid sessionId, string? userAgent);
-	Task<Result<bool>> LogoutSession(Guid sessionId, string? userAgent);
+	Task<Result> LogoutSession(Guid sessionId, string? userAgent);
 	public string UserAgentHash(string userAgent);
 	public bool CheckSessionUserAgentAuth(string? uaSessionHash, string? userAgent = null);
 }
@@ -55,24 +54,24 @@ public class SessionService : ISessionService {
 	/// <returns>A result containing the updated session information if the renewal is successful; otherwise, an error encapsulated in the result.</returns>
 	public async Task<Result<UserRefreshSession>> RenewSession(Guid sessionId, string? userAgent = null) {
 		var session = await this._db.Sessions.FindAsync(sessionId);
-		
+
 		if (session == null) {
-			return new Result<UserRefreshSession>(new SessionNotFoundException());
+			return Result<UserRefreshSession>.Failure("session not found");
 		}
 
 		if (!CheckSessionUserAgentAuth(session.UserAgentHash, userAgent)) {
-			return new Result<UserRefreshSession>(new SessionInvalidClientException());
+			return Result<UserRefreshSession>.Failure("request client does not match session client");
 		}
-		
+
 		session.UpdatedTime = DateTime.UtcNow;
 
 		int updated = await this._db.SaveChangesAsync();
 
 		if (updated < 1) {
-			return new Result<UserRefreshSession>(new SessionNotRenewedException());
+			return Result<UserRefreshSession>.Failure("session renewal failed in database", EFailureType.Unexpected);
 		}
-		
-		return new Result<UserRefreshSession>(session);
+
+		return Result<UserRefreshSession>.Success(session);
 	}
 
 	/// <summary>
@@ -81,21 +80,25 @@ public class SessionService : ISessionService {
 	/// <param name="sessionId">Session Id</param>
 	/// <param name="userAgent">The user agent of the client requesting the logout. This is used to validate the session's authenticity.</param>
 	/// <returns>True if the session was successfully terminated; otherwise, false.</returns>
-	public async Task<Result<bool>> LogoutSession(Guid sessionId, string? userAgent = null) {
+	public async Task<Result> LogoutSession(Guid sessionId, string? userAgent = null) {
 		var session = await this._db.Sessions.FindAsync(sessionId);
 
 		if (session == null) {
-			return new Result<bool>(new SessionNotFoundException());
+			return Result.Failure("session not found");
 		}
-		
+
 		if (!CheckSessionUserAgentAuth(session.UserAgentHash, userAgent)) {
-			return new Result<bool>(new SessionInvalidClientException());
+			return Result.Failure("request client does not match session client");
 		}
 
 		this._db.Sessions.Remove(session);
 		int deleted = await this._db.SaveChangesAsync();
-		
-		return new Result<bool>(deleted > 0);
+
+		if (deleted < 1) {
+			return Result.Failure("session removal failed in database", EFailureType.Unexpected);
+		}
+
+		return Result.Ok();
 	}
 
 	/// <summary>

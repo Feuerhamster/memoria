@@ -30,7 +30,7 @@ public class ConfigureOidcOptions(IOptions<OAuthConfig> oidcConfig, IKeyService 
 		
 		if (sub == null)
 		{
-			var err = new LoginFailedApiException(new Exception("client id not available"));
+			var err = new LoginFailedApiException("client id not available");
 			context.HttpContext.Response.StatusCode = (int) err.StatusCode;
 			await context.HttpContext.Response.WriteAsJsonAsync(err.Value);
 			return;

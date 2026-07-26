@@ -38,7 +38,9 @@ public class Post : IAccessManagedRessource
     // public Ticket? Ticket { get; set; }
     
     public RessourceAccessPolicy AccessPolicy {  get; set; }
-    
+
+    public bool ContextAvailability { get; set; } = true;
+
     public bool IsArchived { get; set; }
     
     public bool IsSpaceDocument { get; set; }

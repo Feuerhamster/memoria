@@ -70,16 +70,16 @@ public class AuthenticationService : IAuthenticationService {
 
 		if (transferObjectRes.IsFailed)
 		{
-			return new Result<OidcProfileData>(transferObjectRes.Exception);
-		}
-		
-		var expiry = transferObjectRes.Value.IssuedAt.Add(_oauthConfig.LoginTokenExpiry);
-		
-		if (DateTime.UtcNow > expiry)
-		{
-			return new Result<OidcProfileData>(new TokenExpiryReached());
+			return Result<OidcProfileData>.Failure(transferObjectRes);
 		}
 
-		return new Result<OidcProfileData>(transferObjectRes.Value);
+		var expiry = transferObjectRes.Value!.IssuedAt.Add(_oauthConfig.LoginTokenExpiry);
+
+		if (DateTime.UtcNow > expiry)
+		{
+			return Result<OidcProfileData>.Failure("token expiry reached");
+		}
+
+		return Result<OidcProfileData>.Success(transferObjectRes.Value);
 	}
 }

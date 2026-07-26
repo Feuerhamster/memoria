@@ -101,7 +101,7 @@ public class FileStorageService : IFileStorageService
             _logger.LogInformation("File saved: {FileId}, Name: {FileName} Size: {Size} kilobytes", 
                 fileId, storedFile.FileName, storedFile.SizeInBytes * 1000);
 
-            return new Result<FileMetadata>(storedFile);
+            return Result<FileMetadata>.Success(storedFile);
         }
         catch (Exception ex)
         {
@@ -117,9 +117,9 @@ public class FileStorageService : IFileStorageService
                     _logger.LogError(deleteEx, "Failed to delete file on failed upload {Path}", fullPath);
                 }
             }
-            
+
             _logger.LogError(ex, "Failed to save file: {FileName}", originalFileName);
-            return new Result<FileMetadata>(ex);
+            return Result<FileMetadata>.Failure(ex);
         }
     }
     
@@ -160,12 +160,12 @@ public class FileStorageService : IFileStorageService
             _logger.LogInformation("File updated: {FileId}, Name: {FileName}, Size: {Size} kilobytes",
                 existingFile.Id, existingFile.FileName, existingFile.SizeInBytes / 1000);
 
-            return new Result<FileMetadata>(existingFile);
+            return Result<FileMetadata>.Success(existingFile);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to update file: {FileId}", existingFile.Id);
-            return new Result<FileMetadata>(ex);
+            return Result<FileMetadata>.Failure(ex);
         }
     }
 
@@ -177,7 +177,7 @@ public class FileStorageService : IFileStorageService
         if (storedFile == null)
         {
             _logger.LogWarning("Datei nicht gefunden: {FileId}", fileId);
-            return new Result<FileDownloadResult>(new FileNotFoundException());
+            return Result<FileDownloadResult>.Failure("file not found");
         }
 
         var fullPath = Path.Combine(_config.StoragePath, GenerateStoragePath(storedFile.Id, Path.GetExtension(storedFile.FileName)));
@@ -185,7 +185,7 @@ public class FileStorageService : IFileStorageService
         if (!File.Exists(fullPath))
         {
             _logger.LogError("Physische Datei nicht gefunden: {Path}", fullPath);
-            return new Result<FileDownloadResult>(new FileNotFoundException());
+            return Result<FileDownloadResult>.Failure("file not found", EFailureType.Unexpected);
         }
 
         var fileStream = new FileStream(
@@ -196,7 +196,7 @@ public class FileStorageService : IFileStorageService
             BUFFER_SIZE,
             useAsync: true);
 
-        return new Result<FileDownloadResult>(new FileDownloadResult
+        return Result<FileDownloadResult>.Success(new FileDownloadResult
         {
             FileStream = fileStream,
             FileName = storedFile.FileName,

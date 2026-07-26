@@ -1,6 +1,6 @@
 namespace Memoria.Models.Database;
 
-public enum EToDoStatus
+public enum EToTicketStatus
 {
     Open,
     InProgress,
@@ -8,7 +8,7 @@ public enum EToDoStatus
     Done
 }
 
-public enum EToDoPriority
+public enum ETicketPriority
 {
     Low,
     Normal,
@@ -16,9 +16,15 @@ public enum EToDoPriority
     Urgent
 }
 
-public class ToDo
+public class Ticket : IAccessManagedRessource
 {
-    public Guid Id;
+    public Guid Id { get; }
+    public Guid OwnerUserId { get; }
+    public Guid? SpaceId { get; }
+    public RessourceAccessPolicy AccessPolicy { get; }
+    
+    public bool ContextAvailability { get; }
+    
     public DateTime CreatedAt;
     public DateTime ModifiedAt;
 
@@ -27,8 +33,8 @@ public class ToDo
     public string Title { get; set; }
     public string? Description { get; set; }
     
-    public EToDoStatus Status { get; set; }
-    public EToDoPriority Priority { get; set; }
+    public EToTicketStatus Status { get; set; }
+    public ETicketPriority Priority { get; set; }
     
     public List<SubTask> SubTasks { get; set; }
     

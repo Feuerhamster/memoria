@@ -19,11 +19,7 @@ public class SessionController(ISessionService sessionService)  : ControllerBase
 		var logout = await sessionService.LogoutSession(claims.SessionId, this.HttpContext.Request.Headers.UserAgent);
 
 		if (logout.IsFailed) {
-			return new LogoutFailedApiException(logout.Exception);
-		}
-
-		if (logout.Value == false) {
-			return new LogoutFailedApiException(new Exception("unknown error"));
+			return new LogoutFailedApiException(logout.FailureDetails);
 		}
 
 		await this.HttpContext.SignOutAsync();
