@@ -63,7 +63,7 @@ public class SpaceUpdateRequest : IDataUpdateObject<Space>
 
         if (this.OwnerUserId != null)
         {
-            this.OwnerUserId = space.OwnerUserId;
+            space.OwnerUserId = this.OwnerUserId.Value;
         }
     }
 }

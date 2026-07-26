@@ -1,18 +1,20 @@
 using Memoria.Exceptions;
 using Memoria.Extensions;
 using Memoria.Models;
+using Memoria.Models.Config;
 using Memoria.Models.Database;
 using Memoria.Models.Request;
 using Memoria.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Memoria.Controllers;
 
 [ApiController]
 [Route("/files")]
-public class FileController(AppDbContext db, IFileStorageService fileService, IAccessPolicyHelperService accessHelper, ISpaceService spaceService) : ControllerBase
+public class FileController(AppDbContext db, IFileStorageService fileService, IAccessPolicyHelperService accessHelper, IOptions<FileConfig> fileConfig) : ControllerBase
 {
     [HttpGet]
     [Authorize]
@@ -63,43 +65,50 @@ public class FileController(AppDbContext db, IFileStorageService fileService, IA
     {
         var user = this.User.GetAuthClaimsData();
 
-        if (upload.SpaceId != null)
+        var uploadLimitBytes = fileConfig.Value.UploadLimitMb * 1024 * 1024;
+
+        if (upload.File.Length > uploadLimitBytes)
         {
-            var spaceExists = await spaceService.SpaceExists(upload.SpaceId.Value);
+            return new ValidationErrorApiException($"Maximum allowed file size is {fileConfig.Value.UploadLimitMb} MB.");
+        }
 
-            if (!spaceExists)
-            {
-                return new NotFoundApiException("Space not found");
-            }
+        var post = await db.Posts.FirstOrDefaultAsync(p => p.Id.Equals(upload.PostId), ct);
 
-            var hasAccess = await accessHelper.CheckSpaceMembership(user.UserId, upload.SpaceId.Value, ct);
+        if (post == null)
+        {
+            return new NotFoundApiException("Post not found");
+        }
 
-            if (!hasAccess) return new AccessDeniedApiException("No space member");
+        var hasAccess = await accessHelper.CheckAccessPolicy(post, AccessIntent.Write, this.User);
+
+        if (!hasAccess) return new AccessDeniedApiException("No write access to the target post");
+
+        var accessPolicy = upload.AccessPolicy ?? RessourceAccessPolicy.Private;
+
+        // A file may be more restrictive than the post it's attached to (e.g. a private file on a
+        // public post), but never less restrictive than the post itself.
+        if (accessPolicy < post.AccessPolicy)
+        {
+            return new ValidationErrorApiException("File access policy must be at least as restrictive as the post it is attached to");
         }
 
         var owner = new RessourceOwnerHelper
         {
             UserId = user.UserId,
-            SpaceId = upload.SpaceId
+            SpaceId = post.SpaceId
         };
 
-        var accessPolicy = RessourceAccessPolicy.Private;
-
-        if (upload.AccessPolicy != null)
-        {
-            accessPolicy = upload.AccessPolicy.Value;
-        }
-        
         await using var stream = upload.File.OpenReadStream();
-                
+
         var fileMeta = await fileService.StoreFile(
             stream,
             upload.File.FileName,
             upload.File.ContentType,
             owner,
             accessPolicy,
+            post.Id,
             ct);
-        
+
         return fileMeta.IsOk ? fileMeta.Value : new OperationFailedApiException(fileMeta.FailureDetails);
     }
 
@@ -115,10 +124,21 @@ public class FileController(AppDbContext db, IFileStorageService fileService, IA
 
         var hasAccess = await accessHelper.CheckAccessPolicy(file, AccessIntent.Write, this.User);
         if (!hasAccess) return new AccessDeniedApiException();
-        
+
+        if (update.AccessPolicy != null && file.PostId != null)
+        {
+            var post = await db.Posts.FirstOrDefaultAsync(p => p.Id.Equals(file.PostId), ct);
+
+            // A file may be more restrictive than the post it's attached to, but never less.
+            if (post != null && update.AccessPolicy.Value < post.AccessPolicy)
+            {
+                return new ValidationErrorApiException("File access policy must be at least as restrictive as the post it is attached to");
+            }
+        }
+
         update.Apply(file);
         var changed = await db.SaveChangesAsync(ct);
-        
+
         return changed > 0 ? file : new OperationFailedApiException();
     }
 

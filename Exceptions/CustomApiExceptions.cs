@@ -36,15 +36,6 @@ public class ValidationErrorApiException(string? details = null)
 {
 }
 
-public class InvalidAuthorizationApiException(string? details = null)
-    : CustomApiException(
-        statusCode: StatusCodes.Status401Unauthorized,
-        error: "invalid_authorization",
-        details: details
-    )
-{
-}
-
 public class NotFoundApiException(string? details = null)
     : CustomApiException(
         statusCode: StatusCodes.Status404NotFound,
@@ -87,15 +78,6 @@ public class AccessDeniedApiException(string? details = null)
         error: "access_denied",
         details: details
     )
-{
-}
-
-public class InvalidRecipeSourceApiException(string? details = null)
-	: CustomApiException(
-		statusCode: StatusCodes.Status400BadRequest,
-		error: "invalid_recipe_source",
-		details: details ?? "This recipe source is invalid or does not work"
-	)
 {
 }
 

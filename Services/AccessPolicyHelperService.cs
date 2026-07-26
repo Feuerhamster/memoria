@@ -68,20 +68,11 @@ public class AccessPolicyHelperService(AppDbContext db) : IAccessPolicyHelperSer
         return this.CheckAccessPolicy(ressource.AccessPolicy, intention, ressource.OwnerUserId, user, ressource.SpaceId);
     }
 
-    public async Task<bool> CheckSpaceMembership(Guid spaceId, Guid userId, CancellationToken ct = default)
+    public Task<bool> CheckSpaceMembership(Guid spaceId, Guid userId, CancellationToken ct = default)
     {
-        var space = await db.Spaces
+        return db.Spaces
             .Cacheable()
             .AsNoTracking()
-            .Select(s => new
-            {
-                s.Id, s.OwnerUserId, Members = s.Members.Select(m => m.Id).ToList()
-            })
-            .Where(s => s.Id.Equals(spaceId))
-            .FirstOrDefaultAsync(ct);
-
-        if (space == null) return false;
-
-        return space.OwnerUserId.Equals(userId) || space.Members.Exists(m => m.Equals(userId));;
+            .AnyAsync(s => s.Id.Equals(spaceId) && (s.OwnerUserId.Equals(userId) || s.Members.Any(m => m.Id.Equals(userId))), ct);
     }
 }

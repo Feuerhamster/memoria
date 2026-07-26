@@ -12,7 +12,7 @@ namespace Memoria.Services;
 
 public interface IFileStorageService
 {
-    Task<Result<FileMetadata>> StoreFile(Stream fileStream, string originalFileName, string contentType, RessourceOwnerHelper owner, RessourceAccessPolicy accessPolicy, CancellationToken cancellationToken = default);
+    Task<Result<FileMetadata>> StoreFile(Stream fileStream, string originalFileName, string contentType, RessourceOwnerHelper owner, RessourceAccessPolicy accessPolicy, Guid? postId = null, CancellationToken cancellationToken = default);
 
     Task<Result<FileMetadata>> UpdateFile(FileMetadata existingFile, Stream fileStream, CancellationToken cancellationToken = default);
 
@@ -44,11 +44,12 @@ public class FileStorageService : IFileStorageService
     }
     
     public async Task<Result<FileMetadata>> StoreFile(
-        Stream fileStream, 
-        string originalFileName, 
-        string contentType, 
+        Stream fileStream,
+        string originalFileName,
+        string contentType,
         RessourceOwnerHelper owner,
         RessourceAccessPolicy accessPolicy,
+        Guid? postId = null,
         CancellationToken cancellationToken = default)
     {
         var fileId = Guid.NewGuid();
@@ -90,6 +91,7 @@ public class FileStorageService : IFileStorageService
                 FileHash = fileHash,
                 OwnerUserId = owner.UserId,
                 SpaceId = owner.SpaceId,
+                PostId = postId,
                 AccessPolicy = accessPolicy,
                 UploadedAt = DateTime.UtcNow,
                 ModifiedAt = DateTime.UtcNow

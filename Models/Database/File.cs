@@ -5,10 +5,16 @@ namespace Memoria.Models.Database;
 public class FileMetadata : IAccessManagedRessource
 {
     public Guid Id { get; set; }
-    
+
     public Guid OwnerUserId { get; set; }
     public Guid? SpaceId { get; set; }
-    
+
+    /// <summary>
+    /// The post this file is attached to, if any. Nullable so the file can outlive/detach
+    /// from that post (e.g. if it gets deleted) and stand on its own as a record.
+    /// </summary>
+    public Guid? PostId { get; set; }
+
     public string FileName { get; set; } = string.Empty;
     public string FileHash { get; set; } = string.Empty;
     public DateTime UploadedAt { get; set; }

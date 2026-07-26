@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using Memoria.Models.Database;
 
 namespace Memoria.Models.Request;
@@ -7,19 +6,20 @@ public class CreatePostRequest
 {
     public Guid? SpaceId { get; set; }
     public RessourceAccessPolicy Visibility { get; set; } = RessourceAccessPolicy.Private;
- 
-    [MinLength(1)]
-    public string Text { get; set; }
-    
+
+    /// <summary>
+    /// May be null/empty — a post can act purely as an organizational element (e.g. the
+    /// "created" event for a file or ticket) without any text content of its own.
+    /// </summary>
+    public string? Text { get; set; }
+
     public Guid? ParentId { get; set; }
     public Guid? RootParentId { get; set; }
-    
-    public Guid? File { get; set; }
 }
 
 public class UpdatePostRequest : IDataUpdateObject<Post>
 {
-    public string? Text { get; set; } = string.Empty;
+    public string? Text { get; set; }
     
     public RessourceAccessPolicy? AccessPolicy {  get; set; }
     
@@ -31,7 +31,7 @@ public class UpdatePostRequest : IDataUpdateObject<Post>
     {
         if (this.Text != null)
         {
-            this.Text = post.Text;
+            post.Text = this.Text;
         }
 
         if (this.AccessPolicy.HasValue)

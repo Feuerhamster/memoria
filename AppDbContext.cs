@@ -10,26 +10,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
 {
     public DbSet<User> Users { get; set; }
     public DbSet<UserRefreshSession> Sessions { get; set; }
-    
+
     public DbSet<UserAppAccessToken> AppAccessTokens { get; set; }
-    
+
     public DbSet<Space> Spaces { get; set; }
-    
+
     public DbSet<FileMetadata> Files { get; set; }
-    
+
     public DbSet<Post> Posts { get; set; }
-    
+
+    public DbSet<Ticket> Tickets { get; set; }
+
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
         options.UseSqlite($"Data Source={config.Value.ConnectionString}");
     }
-    
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         this.CreateUserManagementModels(modelBuilder);
-        
+
         modelBuilder.Entity<Space>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -41,7 +43,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
                 .HasForeignKey(e => e.ImageId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
-        
+
         modelBuilder.Entity<FileMetadata>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -49,15 +51,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
                 .WithMany()
                 .HasForeignKey(e => e.OwnerUserId)
                 .OnDelete(DeleteBehavior.SetNull);
-            
+
             entity.HasOne<Space>()
                 .WithMany()
                 .HasForeignKey(f => f.SpaceId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne<Post>()
+                .WithMany(p => p.Files)
+                .HasForeignKey(f => f.PostId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
-        
+
         this.CreatePostModel(modelBuilder);
-        //this.CreateTicketModel(modelBuilder);
+        this.CreateTicketModel(modelBuilder);
     }
 
     private void CreateUserManagementModels(ModelBuilder modelBuilder)
@@ -68,7 +75,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
             entity.HasIndex(e => e.OidcSub).IsUnique();
             entity.HasIndex(e => e.OidcProvider).IsUnique();
         });
-        
+
         modelBuilder.Entity<UserRefreshSession>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -95,53 +102,57 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Datab
         modelBuilder.Entity<Post>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasOne<User>()
+            entity.HasOne(e => e.Owner)
                 .WithMany()
                 .HasForeignKey(e => e.OwnerUserId)
                 .OnDelete(DeleteBehavior.SetNull)
                 .IsRequired();
 
+            entity.HasOne(e => e.Space)
+                .WithMany()
+                .HasForeignKey(e => e.SpaceId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasOne<Post>()
                 .WithMany()
                 .HasForeignKey(e => e.ParentId)
                 .OnDelete(DeleteBehavior.SetNull);
-            
+
             entity.HasOne<Post>()
                 .WithMany()
                 .HasForeignKey(e => e.RootParentId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity
-                .HasOne<FileMetadata>(e => e.File)
-                .WithMany();
+            // Supports keyset-paginated timeline queries (WHERE CreatedAt < @cursor ORDER BY CreatedAt DESC)
+            // without an expensive OFFSET scan.
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => new { e.SpaceId, e.CreatedAt });
         });
     }
 
-    /*private void CreateTicketModel(ModelBuilder modelBuilder)
+    private void CreateTicketModel(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Ticket>(entity =>
         {
             entity.HasKey(e => e.Id);
-            
-            entity.HasOne<User>()
-                .WithMany()
-                .HasForeignKey(e => e.OwnerUserId)
-                .OnDelete(DeleteBehavior.SetNull);
-            
-            entity.HasOne<Space>()
-                .WithMany()
-                .HasForeignKey(f => f.SpaceId)
-                .OnDelete(DeleteBehavior.SetNull);
-            
-            entity.HasOne<Post>(t => t.Post)
-                .WithOne(p => p.Ticket)
-                .HasForeignKey<Post>()
-                .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasMany(t => t.SubTasks)
-                .WithOne()
-                .HasForeignKey(t => t.Id)
-                .OnDelete(DeleteBehavior.Cascade);
+            entity.Ignore(e => e.OwnerUserId);
+            entity.Ignore(e => e.SpaceId);
+            entity.Ignore(e => e.AccessPolicy);
+            entity.Ignore(e => e.ContextAvailability);
+
+            entity.HasIndex(e => e.PostId).IsUnique();
+
+            entity.HasOne(e => e.Post)
+                .WithOne(p => p.Ticket)
+                .HasForeignKey<Ticket>(e => e.PostId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired();
+
+            entity.OwnsMany(e => e.SubTasks);
+
+            entity.HasMany(e => e.Assignees)
+                .WithMany();
         });
-    }*/
+    }
 }

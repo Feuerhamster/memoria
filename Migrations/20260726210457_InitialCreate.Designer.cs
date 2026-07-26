@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Memoria.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260726190138_AddContextAvailability")]
-    partial class AddContextAvailability
+    [Migration("20260726210457_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -50,6 +50,9 @@ namespace Memoria.Migrations
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("PostId")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("SizeInBytes")
                         .HasColumnType("INTEGER");
 
@@ -62,6 +65,8 @@ namespace Memoria.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("PostId");
 
                     b.HasIndex("SpaceId");
 
@@ -81,9 +86,6 @@ namespace Memoria.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("FileId")
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsArchived")
@@ -108,18 +110,19 @@ namespace Memoria.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Text")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FileId");
+                    b.HasIndex("CreatedAt");
 
                     b.HasIndex("OwnerUserId");
 
                     b.HasIndex("ParentId");
 
                     b.HasIndex("RootParentId");
+
+                    b.HasIndex("SpaceId", "CreatedAt");
 
                     b.ToTable("Posts");
                 });
@@ -164,6 +167,45 @@ namespace Memoria.Migrations
                     b.HasIndex("ImageId");
 
                     b.ToTable("Spaces");
+                });
+
+            modelBuilder.Entity("Memoria.Models.Database.Ticket", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("PostId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PostId")
+                        .IsUnique();
+
+                    b.ToTable("Tickets");
                 });
 
             modelBuilder.Entity("Memoria.Models.Database.User", b =>
@@ -294,6 +336,21 @@ namespace Memoria.Migrations
                     b.ToTable("SpaceUser");
                 });
 
+            modelBuilder.Entity("TicketUser", b =>
+                {
+                    b.Property<Guid>("AssigneesId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("AssigneesId", "TicketId");
+
+                    b.HasIndex("TicketId");
+
+                    b.ToTable("TicketUser");
+                });
+
             modelBuilder.Entity("Memoria.Models.Database.FileMetadata", b =>
                 {
                     b.HasOne("Memoria.Models.Database.User", null)
@@ -301,6 +358,11 @@ namespace Memoria.Migrations
                         .HasForeignKey("OwnerUserId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .IsRequired();
+
+                    b.HasOne("Memoria.Models.Database.Post", null)
+                        .WithMany("Files")
+                        .HasForeignKey("PostId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Memoria.Models.Database.Space", null)
                         .WithMany()
@@ -310,11 +372,7 @@ namespace Memoria.Migrations
 
             modelBuilder.Entity("Memoria.Models.Database.Post", b =>
                 {
-                    b.HasOne("Memoria.Models.Database.FileMetadata", "File")
-                        .WithMany()
-                        .HasForeignKey("FileId");
-
-                    b.HasOne("Memoria.Models.Database.User", null)
+                    b.HasOne("Memoria.Models.Database.User", "Owner")
                         .WithMany()
                         .HasForeignKey("OwnerUserId")
                         .OnDelete(DeleteBehavior.SetNull)
@@ -330,7 +388,14 @@ namespace Memoria.Migrations
                         .HasForeignKey("RootParentId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.Navigation("File");
+                    b.HasOne("Memoria.Models.Database.Space", "Space")
+                        .WithMany()
+                        .HasForeignKey("SpaceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Owner");
+
+                    b.Navigation("Space");
                 });
 
             modelBuilder.Entity("Memoria.Models.Database.Space", b =>
@@ -339,6 +404,43 @@ namespace Memoria.Migrations
                         .WithMany()
                         .HasForeignKey("ImageId")
                         .OnDelete(DeleteBehavior.Cascade);
+                });
+
+            modelBuilder.Entity("Memoria.Models.Database.Ticket", b =>
+                {
+                    b.HasOne("Memoria.Models.Database.Post", "Post")
+                        .WithOne("Ticket")
+                        .HasForeignKey("Memoria.Models.Database.Ticket", "PostId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.OwnsMany("Memoria.Models.Database.SubTask", "SubTasks", b1 =>
+                        {
+                            b1.Property<Guid>("TicketId")
+                                .HasColumnType("TEXT");
+
+                            b1.Property<int>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("INTEGER");
+
+                            b1.Property<bool>("Checked")
+                                .HasColumnType("INTEGER");
+
+                            b1.Property<string>("Name")
+                                .IsRequired()
+                                .HasColumnType("TEXT");
+
+                            b1.HasKey("TicketId", "Id");
+
+                            b1.ToTable("SubTask");
+
+                            b1.WithOwner()
+                                .HasForeignKey("TicketId");
+                        });
+
+                    b.Navigation("Post");
+
+                    b.Navigation("SubTasks");
                 });
 
             modelBuilder.Entity("Memoria.Models.Database.UserAppAccessToken", b =>
@@ -372,6 +474,28 @@ namespace Memoria.Migrations
                         .HasForeignKey("SpaceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("TicketUser", b =>
+                {
+                    b.HasOne("Memoria.Models.Database.User", null)
+                        .WithMany()
+                        .HasForeignKey("AssigneesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Memoria.Models.Database.Ticket", null)
+                        .WithMany()
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Memoria.Models.Database.Post", b =>
+                {
+                    b.Navigation("Files");
+
+                    b.Navigation("Ticket");
                 });
 #pragma warning restore 612, 618
         }

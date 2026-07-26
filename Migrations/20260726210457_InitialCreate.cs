@@ -26,6 +26,24 @@ namespace Memoria.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Users",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    RegisterDate = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    Username = table.Column<string>(type: "TEXT", nullable: false),
+                    Nickname = table.Column<string>(type: "TEXT", nullable: false),
+                    Image = table.Column<string>(type: "TEXT", nullable: true),
+                    OidcSub = table.Column<string>(type: "TEXT", nullable: false),
+                    OidcProvider = table.Column<string>(type: "TEXT", nullable: false),
+                    EMail = table.Column<string>(type: "TEXT", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Users", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "AppAccessTokens",
                 columns: table => new
                 {
@@ -38,18 +56,33 @@ namespace Memoria.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AppAccessTokens", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_AppAccessTokens_Users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
-                name: "FileMetadataPost",
+                name: "Sessions",
                 columns: table => new
                 {
-                    FilesId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    PostId = table.Column<Guid>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    UserId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    UserAgentHash = table.Column<string>(type: "TEXT", nullable: true),
+                    CreatedTime = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    UpdatedTime = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_FileMetadataPost", x => new { x.FilesId, x.PostId });
+                    table.PrimaryKey("PK_Sessions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Sessions_Users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -59,16 +92,25 @@ namespace Memoria.Migrations
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
                     OwnerUserId = table.Column<Guid>(type: "TEXT", nullable: false),
                     SpaceId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    PostId = table.Column<Guid>(type: "TEXT", nullable: true),
                     FileName = table.Column<string>(type: "TEXT", nullable: false),
                     FileHash = table.Column<string>(type: "TEXT", nullable: false),
                     UploadedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    ModifiedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
                     ContentType = table.Column<string>(type: "TEXT", nullable: false),
                     SizeInBytes = table.Column<long>(type: "INTEGER", nullable: false),
-                    AccessPolicy = table.Column<int>(type: "INTEGER", nullable: false)
+                    AccessPolicy = table.Column<int>(type: "INTEGER", nullable: false),
+                    ContextAvailability = table.Column<bool>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Files", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Files_Users_OwnerUserId",
+                        column: x => x.OwnerUserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -83,6 +125,7 @@ namespace Memoria.Migrations
                     OwnerUserId = table.Column<Guid>(type: "TEXT", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
                     AccessPolicy = table.Column<int>(type: "INTEGER", nullable: false),
+                    ContextAvailability = table.Column<bool>(type: "INTEGER", nullable: false),
                     AllowJoins = table.Column<bool>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
@@ -105,10 +148,13 @@ namespace Memoria.Migrations
                     SpaceId = table.Column<Guid>(type: "TEXT", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
                     ModifiedAt = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    Text = table.Column<string>(type: "TEXT", nullable: true),
                     ParentId = table.Column<Guid>(type: "TEXT", nullable: true),
                     RootParentId = table.Column<Guid>(type: "TEXT", nullable: true),
                     AccessPolicy = table.Column<int>(type: "INTEGER", nullable: false),
-                    IsArchived = table.Column<bool>(type: "INTEGER", nullable: false)
+                    ContextAvailability = table.Column<bool>(type: "INTEGER", nullable: false),
+                    IsArchived = table.Column<bool>(type: "INTEGER", nullable: false),
+                    IsSpaceDocument = table.Column<bool>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -125,42 +171,18 @@ namespace Memoria.Migrations
                         principalTable: "Posts",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "TextNotes",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Title = table.Column<string>(type: "TEXT", nullable: true),
-                    Text = table.Column<string>(type: "TEXT", nullable: false),
-                    PostId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    IsInSpaceDocs = table.Column<bool>(type: "INTEGER", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_TextNotes", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_TextNotes_Posts_PostId",
-                        column: x => x.PostId,
-                        principalTable: "Posts",
+                        name: "FK_Posts_Spaces_SpaceId",
+                        column: x => x.SpaceId,
+                        principalTable: "Spaces",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Sessions",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    UserId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    UserAgentHash = table.Column<string>(type: "TEXT", nullable: true),
-                    CreatedTime = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    UpdatedTime = table.Column<DateTime>(type: "TEXT", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Sessions", x => x.Id);
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_Posts_Users_OwnerUserId",
+                        column: x => x.OwnerUserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -179,76 +201,81 @@ namespace Memoria.Migrations
                         principalTable: "Spaces",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Ticket",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    OwnerUserId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    SpaceId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    AccessPolicy = table.Column<int>(type: "INTEGER", nullable: false),
-                    Title = table.Column<string>(type: "TEXT", nullable: false),
-                    Description = table.Column<string>(type: "TEXT", nullable: false),
-                    Status = table.Column<int>(type: "INTEGER", nullable: false),
-                    Priority = table.Column<int>(type: "INTEGER", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    DueDate = table.Column<DateTime>(type: "TEXT", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Ticket", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Ticket_Spaces_SpaceId",
-                        column: x => x.SpaceId,
-                        principalTable: "Spaces",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "TicketSubTask",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", nullable: false),
-                    Status = table.Column<int>(type: "INTEGER", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_TicketSubTask", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_TicketSubTask_Ticket_Id",
-                        column: x => x.Id,
-                        principalTable: "Ticket",
+                        name: "FK_SpaceUser_Users_MembersId",
+                        column: x => x.MembersId,
+                        principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
-                name: "Users",
+                name: "Tickets",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    RegisterDate = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    Username = table.Column<string>(type: "TEXT", nullable: false),
-                    Nickname = table.Column<string>(type: "TEXT", nullable: false),
-                    Image = table.Column<string>(type: "TEXT", nullable: true),
-                    OidcSub = table.Column<string>(type: "TEXT", nullable: false),
-                    OidcProvider = table.Column<string>(type: "TEXT", nullable: false),
-                    EMail = table.Column<string>(type: "TEXT", nullable: true),
-                    TicketId = table.Column<Guid>(type: "TEXT", nullable: true)
+                    PostId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    ModifiedAt = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    Title = table.Column<string>(type: "TEXT", nullable: false),
+                    Description = table.Column<string>(type: "TEXT", nullable: true),
+                    Status = table.Column<int>(type: "INTEGER", nullable: false),
+                    Priority = table.Column<int>(type: "INTEGER", nullable: false),
+                    DueDate = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Users", x => x.Id);
+                    table.PrimaryKey("PK_Tickets", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Users_Ticket_TicketId",
+                        name: "FK_Tickets_Posts_PostId",
+                        column: x => x.PostId,
+                        principalTable: "Posts",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "SubTask",
+                columns: table => new
+                {
+                    TicketId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Id = table.Column<int>(type: "INTEGER", nullable: false),
+                    Name = table.Column<string>(type: "TEXT", nullable: false),
+                    Checked = table.Column<bool>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SubTask", x => new { x.TicketId, x.Id });
+                    table.ForeignKey(
+                        name: "FK_SubTask_Tickets_TicketId",
                         column: x => x.TicketId,
-                        principalTable: "Ticket",
-                        principalColumn: "Id");
+                        principalTable: "Tickets",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "TicketUser",
+                columns: table => new
+                {
+                    AssigneesId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    TicketId = table.Column<Guid>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TicketUser", x => new { x.AssigneesId, x.TicketId });
+                    table.ForeignKey(
+                        name: "FK_TicketUser_Tickets_TicketId",
+                        column: x => x.TicketId,
+                        principalTable: "Tickets",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_TicketUser_Users_AssigneesId",
+                        column: x => x.AssigneesId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateIndex(
@@ -262,19 +289,24 @@ namespace Memoria.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_FileMetadataPost_PostId",
-                table: "FileMetadataPost",
-                column: "PostId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_Files_OwnerUserId",
                 table: "Files",
                 column: "OwnerUserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Files_PostId",
+                table: "Files",
+                column: "PostId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Files_SpaceId",
                 table: "Files",
                 column: "SpaceId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Posts_CreatedAt",
+                table: "Posts",
+                column: "CreatedAt");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Posts_OwnerUserId",
@@ -292,6 +324,11 @@ namespace Memoria.Migrations
                 column: "RootParentId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Posts_SpaceId_CreatedAt",
+                table: "Posts",
+                columns: new[] { "SpaceId", "CreatedAt" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Sessions_UserId",
                 table: "Sessions",
                 column: "UserId");
@@ -307,20 +344,15 @@ namespace Memoria.Migrations
                 column: "SpaceId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_TextNotes_PostId",
-                table: "TextNotes",
+                name: "IX_Tickets_PostId",
+                table: "Tickets",
                 column: "PostId",
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_Ticket_OwnerUserId",
-                table: "Ticket",
-                column: "OwnerUserId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Ticket_SpaceId",
-                table: "Ticket",
-                column: "SpaceId");
+                name: "IX_TicketUser_TicketId",
+                table: "TicketUser",
+                column: "TicketId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Users_OidcProvider",
@@ -334,88 +366,19 @@ namespace Memoria.Migrations
                 column: "OidcSub",
                 unique: true);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Users_TicketId",
-                table: "Users",
-                column: "TicketId");
-
             migrationBuilder.AddForeignKey(
-                name: "FK_AppAccessTokens_Users_UserId",
-                table: "AppAccessTokens",
-                column: "UserId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_FileMetadataPost_Files_FilesId",
-                table: "FileMetadataPost",
-                column: "FilesId",
-                principalTable: "Files",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_FileMetadataPost_Posts_PostId",
-                table: "FileMetadataPost",
+                name: "FK_Files_Posts_PostId",
+                table: "Files",
                 column: "PostId",
                 principalTable: "Posts",
                 principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+                onDelete: ReferentialAction.SetNull);
 
             migrationBuilder.AddForeignKey(
                 name: "FK_Files_Spaces_SpaceId",
                 table: "Files",
                 column: "SpaceId",
                 principalTable: "Spaces",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.SetNull);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_Files_Users_OwnerUserId",
-                table: "Files",
-                column: "OwnerUserId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.SetNull);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_Posts_Ticket_Id",
-                table: "Posts",
-                column: "Id",
-                principalTable: "Ticket",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_Posts_Users_OwnerUserId",
-                table: "Posts",
-                column: "OwnerUserId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.SetNull);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_Sessions_Users_UserId",
-                table: "Sessions",
-                column: "UserId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_SpaceUser_Users_MembersId",
-                table: "SpaceUser",
-                column: "MembersId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_Ticket_Users_OwnerUserId",
-                table: "Ticket",
-                column: "OwnerUserId",
-                principalTable: "Users",
                 principalColumn: "Id",
                 onDelete: ReferentialAction.SetNull);
         }
@@ -428,12 +391,16 @@ namespace Memoria.Migrations
                 table: "Files");
 
             migrationBuilder.DropForeignKey(
-                name: "FK_Ticket_Users_OwnerUserId",
-                table: "Ticket");
+                name: "FK_Posts_Users_OwnerUserId",
+                table: "Posts");
 
             migrationBuilder.DropForeignKey(
-                name: "FK_Spaces_Files_ImageId",
-                table: "Spaces");
+                name: "FK_Files_Posts_PostId",
+                table: "Files");
+
+            migrationBuilder.DropForeignKey(
+                name: "FK_Files_Spaces_SpaceId",
+                table: "Files");
 
             migrationBuilder.DropTable(
                 name: "AppAccessTokens");
@@ -442,34 +409,31 @@ namespace Memoria.Migrations
                 name: "DataProtectionKeys");
 
             migrationBuilder.DropTable(
-                name: "FileMetadataPost");
-
-            migrationBuilder.DropTable(
                 name: "Sessions");
 
             migrationBuilder.DropTable(
                 name: "SpaceUser");
 
             migrationBuilder.DropTable(
-                name: "TextNotes");
+                name: "SubTask");
 
             migrationBuilder.DropTable(
-                name: "TicketSubTask");
+                name: "TicketUser");
 
             migrationBuilder.DropTable(
-                name: "Posts");
+                name: "Tickets");
 
             migrationBuilder.DropTable(
                 name: "Users");
 
             migrationBuilder.DropTable(
-                name: "Ticket");
-
-            migrationBuilder.DropTable(
-                name: "Files");
+                name: "Posts");
 
             migrationBuilder.DropTable(
                 name: "Spaces");
+
+            migrationBuilder.DropTable(
+                name: "Files");
         }
     }
 }

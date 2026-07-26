@@ -56,9 +56,14 @@ public class SpaceController(AppDbContext database, ISpaceService spaceService) 
         var user = this.User.GetAuthClaimsData();
 
         var space = await spaceService.GetSpace(spaceId, ct);
-        
+
         if (space == null) return new NotFoundApiException();
-        
+
+        if (!space.OwnerUserId.Equals(user.UserId))
+        {
+            return new ActionNotAllowedApiException();
+        }
+
         update.Apply(space);
         
         var res = await database.SaveChangesAsync(ct);
@@ -146,7 +151,10 @@ public class SpaceController(AppDbContext database, ISpaceService spaceService) 
         
         if (userToRemove == null) return new NotFoundApiException();
 
-        if (!space.OwnerUserId.Equals(user.UserId) && !space.Members.Any(m => m.Id.Equals(user.UserId)))
+        var isSelfRemoval = memberId.Equals(user.UserId);
+        var isOwner = space.OwnerUserId.Equals(user.UserId);
+
+        if (!isOwner && !isSelfRemoval)
         {
             return new ActionNotAllowedApiException();
         }

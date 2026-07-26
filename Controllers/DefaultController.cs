@@ -1,24 +1,27 @@
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Memoria.Exceptions;
-using Memoria.Services;
-using System.Security.Claims;
 
 namespace Memoria.Controllers;
 
 [ApiController]
 [Route("/")]
-public class DefaultController() : ControllerBase {
+public class DefaultController(AppDbContext db) : ControllerBase {
 
 	[HttpHead]
 	public IActionResult OnlineCheck() {
 		return Ok();
 	}
-	
+
 	[HttpGet("healthcheck")]
-	public async Task<IActionResult> HealthCheck()
+	public async Task<IActionResult> HealthCheck(CancellationToken ct)
 	{
+		var canConnect = await db.Database.CanConnectAsync(ct);
+
+		if (!canConnect)
+		{
+			return new ApplicationUnhealthyApiException("database not reachable");
+		}
+
 		return Ok();
 	}
 }

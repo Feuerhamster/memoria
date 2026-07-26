@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 using AppDbContext = Memoria.AppDbContext;
@@ -38,21 +39,17 @@ builder.Services.AddControllers().AddJsonOptions(options => {
 
 builder.Services.AddOpenApi();
 
-builder.Services.AddLocalization(options => options.ResourcesPath = "Ressources");
-builder.Services.Configure<RequestLocalizationOptions>(options =>
-{
-    var supportedCultures = new[] { "en", "en-US", "de", "de-DE" };
-    options.SetDefaultCulture(supportedCultures[0])
-        .AddSupportedCultures(supportedCultures)
-        .AddSupportedUICultures(supportedCultures);
-});
-
-
 builder.Services.Configure<DatabaseConfig>(builder.Configuration.GetSection(DatabaseConfig.ConfigKey));
 builder.Services.Configure<OAuthConfig>(builder.Configuration.GetSection(OAuthConfig.ConfigKey));
 builder.Services.Configure<SessionConfig>(builder.Configuration.GetSection(SessionConfig.ConfigKey));
 builder.Services.Configure<FileConfig>(builder.Configuration.GetSection(FileConfig.ConfigKey));
-builder.Services.Configure<OnlyOfficeConfig>(builder.Configuration.GetSection(OnlyOfficeConfig.ConfigKey));
+
+var fileConfig = builder.Configuration.GetSection(FileConfig.ConfigKey).Get<FileConfig>() ?? new FileConfig();
+
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = fileConfig.UploadLimitMb * 1024 * 1024;
+});
 
 builder.Services.AddConfiguredDbContext();
 
@@ -62,7 +59,6 @@ builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IAccessPolicyHelperService, AccessPolicyHelperService>();
-// builder.Services.AddScoped<IOnlyOfficeService, OnlyOfficeService>();
 builder.Services.AddScoped<IImageService, ImageService>();
 
 builder.Services.AddScoped<ISpaceService, SpaceService>();
@@ -110,6 +106,11 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 var app = builder.Build();
 
+using (var migrationScope = app.Services.CreateScope())
+{
+    migrationScope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -121,8 +122,6 @@ else
 {
     app.UseForwardedHeaders();
 }
-
-app.UseRequestLocalization();
 
 app.UseRouting();
 

@@ -7,20 +7,27 @@ public class FileUploadRequest
 {
     [Required]
     public required IFormFile File { get; set; }
-    
-    public Guid? SpaceId { get; set; }
-    
+
+    /// <summary>
+    /// The post this file gets attached to. The file's space is derived from that post — upload
+    /// the post first, then attach files to it via its id.
+    /// </summary>
+    [Required]
+    public Guid PostId { get; set; }
+
     public RessourceAccessPolicy? AccessPolicy { get; set; }
 }
 
 public class FileUpdateRequest : IDataUpdateObject<FileMetadata>
 {
     public string? Name { get; set; }
-    
-    public Guid? SpaceId { get; set; }
-    
+
+    /// <summary>
+    /// A file's space always follows the post it's attached to — it cannot be moved to another
+    /// space independently. To move a file, move (or re-attach it to a post in) the target space.
+    /// </summary>
     public RessourceAccessPolicy? AccessPolicy { get; set; }
-    
+
     public void Apply(FileMetadata file)
     {
         if (this.Name != null)
@@ -28,16 +35,11 @@ public class FileUpdateRequest : IDataUpdateObject<FileMetadata>
             file.FileName = this.Name;
         }
 
-        if (this.SpaceId != null)
-        {
-            file.SpaceId = this.SpaceId;
-        }
-
         if (this.AccessPolicy != null)
         {
             file.AccessPolicy = this.AccessPolicy.Value;
         }
-        
-        file.UploadedAt = DateTime.UtcNow;
+
+        file.ModifiedAt = DateTime.UtcNow;
     }
 }
